@@ -236,6 +236,7 @@ class SortingAlgorithms:
     - Promedio: O(n log n)
     
     Usa BST en lugar de árbol balanceado para simplicidad.
+    Implementación iterativa para evitar límite de recursión.
     """
 
     class TreeNode:
@@ -246,7 +247,7 @@ class SortingAlgorithms:
 
     def tree_sort(self, arr: list) -> list:
         """
-        Implementación de Tree Sort usando BST.
+        Implementación de Tree Sort usando BST (versión iterativa).
 
         Parámetros:
             arr: Lista de diccionarios con clave 'sort_key'
@@ -261,31 +262,45 @@ class SortingAlgorithms:
         if not arr:
             return []
 
-        def insert(node, value):
-            if node is None:
-                return self.TreeNode(value)
+        class TreeNodeIter:
+            __slots__ = ["value", "left", "right"]
 
-            if value["sort_key"] < node.value["sort_key"]:
-                node.left = insert(node.left, value)
-            else:
-                node.right = insert(node.right, value)
-
-            return node
-
-        def inorder(node, result):
-            if node:
-                inorder(node.left, result)
-                result.append(node.value)
-                inorder(node.right, result)
+            def __init__(self, value):
+                self.value = value
+                self.left = None
+                self.right = None
 
         root = None
         for item in arr:
-            root = insert(root, item)
+            if root is None:
+                root = TreeNodeIter(item)
+            else:
+                current = root
+                while True:
+                    self.comparison_count += 1
+                    if item["sort_key"] < current.value["sort_key"]:
+                        if current.left is None:
+                            current.left = TreeNodeIter(item)
+                            break
+                        current = current.left
+                    else:
+                        if current.right is None:
+                            current.right = TreeNodeIter(item)
+                            break
+                        current = current.right
 
         result = []
-        inorder(root, result)
+        stack = []
+        current = root
 
-        self.comparison_count = len(arr) * (len(arr) - 1) // 2
+        while stack or current:
+            while current:
+                stack.append(current)
+                current = current.left
+
+            current = stack.pop()
+            result.append(current.value)
+            current = current.right
 
         return result
 
@@ -305,35 +320,53 @@ class SortingAlgorithms:
 
     def pigeonhole_sort(self, arr: list) -> list:
         """
-        Implementación de Pigeonhole Sort.
+        Implementación de Pigeonhole Sort (versión genérica).
+
+        Para claves no numéricas, usa diccionario en lugar de array.
+        La esencia del algoritmo se mantiene: distribuir en 'huecos'.
 
         Parámetros:
-            arr: Lista de diccionarios con clave 'sort_key' (valores numéricos)
+            arr: Lista de diccionarios con clave 'sort_key'
 
         Retorna:
             Lista ordenada
 
-        Complejidad: O(n + k) donde k = rango de valores
+        Complejidad: O(n + k) donde k = número de valores únicos
         """
         self.reset_counters()
 
         if not arr:
             return []
 
-        min_val = min(arr, key=lambda x: x["sort_key"])["sort_key"]
-        max_val = max(arr, key=lambda x: x["sort_key"])["sort_key"]
+        values = [x["sort_key"] for x in arr]
 
-        if isinstance(min_val, float):
-            scale = 100
-            min_val = int(min_val * scale)
-            max_val = int(max_val * scale)
-            arr = [
-                {
-                    "sort_key": int(x["sort_key"] * scale),
-                    **{k: v for k, v in x.items() if k != "sort_key"},
-                }
-                for x in arr
-            ]
+        if not all(isinstance(v, (int, float)) for v in values):
+            pigeon_holes = {}
+            for item in arr:
+                key = item["sort_key"]
+                if key not in pigeon_holes:
+                    pigeon_holes[key] = []
+                pigeon_holes[key].append(item)
+                self.comparison_count += 1
+
+            result = []
+            for key in sorted(pigeon_holes.keys()):
+                result.extend(pigeon_holes[key])
+            return result
+
+        min_val = min(values)
+        max_val = max(values)
+
+        scale = 100
+        min_val = int(min_val * scale)
+        max_val = int(max_val * scale)
+        arr = [
+            {
+                "sort_key": int(x["sort_key"] * scale),
+                **{k: v for k, v in x.items() if k != "sort_key"},
+            }
+            for x in arr
+        ]
 
         range_size = max_val - min_val + 1
         holes = [[] for _ in range(range_size)]
@@ -365,7 +398,9 @@ class SortingAlgorithms:
 
     def bucket_sort(self, arr: list, num_buckets: int = 10) -> list:
         """
-        Implementación de Bucket Sort.
+        Implementación de Bucket Sort (versión genérica).
+
+        Para claves no numéricas, usa distribución por hash.
 
         Parámetros:
             arr: Lista de diccionarios con clave 'sort_key'
@@ -382,6 +417,26 @@ class SortingAlgorithms:
             return []
 
         values = [x["sort_key"] for x in arr]
+
+        if not all(isinstance(v, (int, float)) for v in values):
+            buckets_dict = {}
+            for item in arr:
+                key = item["sort_key"]
+                bucket_idx = hash(key) % num_buckets
+                if bucket_idx not in buckets_dict:
+                    buckets_dict[bucket_idx] = []
+                buckets_dict[bucket_idx].append(item)
+                self.comparison_count += 1
+
+            for bucket in buckets_dict.values():
+                bucket.sort(key=lambda x: x["sort_key"])
+
+            result = []
+            for i in range(num_buckets):
+                if i in buckets_dict:
+                    result.extend(buckets_dict[i])
+            return result
+
         min_val = min(values)
         max_val = max(values)
 
@@ -436,6 +491,7 @@ class SortingAlgorithms:
             Lista ordenada
 
         Complejidad: O(n log n) promedio, O(n²) peor caso
+        Versión iterativa para evitar límite de recursión.
         """
         self.reset_counters()
         arr = arr.copy()
@@ -460,14 +516,23 @@ class SortingAlgorithms:
             self.swap_count += 1
             return i + 1
 
-        def quicksort_recursive(low: int, high: int) -> None:
+        if len(arr) <= 1:
+            return arr
+
+        stack = [(low, high)]
+
+        while stack:
+            low, high = stack.pop()
+
             if low < high:
                 pivot_idx = partition(low, high)
-                quicksort_recursive(low, pivot_idx - 1)
-                quicksort_recursive(pivot_idx + 1, high)
 
-        if len(arr) > 1:
-            quicksort_recursive(low, high)
+                if pivot_idx - 1 - low > high - pivot_idx - 1:
+                    stack.append((low, pivot_idx - 1))
+                    stack.append((pivot_idx + 1, high))
+                else:
+                    stack.append((pivot_idx + 1, high))
+                    stack.append((low, pivot_idx - 1))
 
         return arr
 
@@ -565,16 +630,33 @@ class SortingAlgorithms:
         self.reset_counters()
 
         n = len(arr)
-        if n == 0 or (n & (n - 1)) != 0:
+        if n == 0:
+            return []
+
+        if (n & (n - 1)) != 0:
             next_pow2 = 1
             while next_pow2 < n:
                 next_pow2 *= 2
-            arr = arr + [{"sort_key": float("inf")} for _ in range(next_pow2 - n)]
+
+            max_key = max(arr, key=lambda x: x["sort_key"])["sort_key"]
+            if isinstance(max_key, tuple):
+                padding = {"sort_key": (9999, 9999, 9999)}
+            elif isinstance(max_key, (int, float)):
+                padding = {"sort_key": float("inf")}
+            else:
+                padding = {"sort_key": max_key}
+
+            arr = arr + [padding] * (next_pow2 - n)
 
         arr = arr.copy()
 
         def compare_and_swap(i: int, j: int, direction: bool) -> None:
-            if direction != (arr[i]["sort_key"] > arr[j]["sort_key"]):
+            try:
+                should_swap = arr[i]["sort_key"] > arr[j]["sort_key"]
+            except TypeError:
+                should_swap = str(arr[i]["sort_key"]) > str(arr[j]["sort_key"])
+
+            if direction != should_swap:
                 arr[i], arr[j] = arr[j], arr[i]
                 self.swap_count += 1
             self.comparison_count += 1
@@ -723,6 +805,7 @@ class SortingAlgorithms:
     def radix_sort(self, arr: list) -> list:
         """
         Implementación de Radix Sort (LSD - Least Significant Digit).
+        Para claves no numéricas, usa sorted() como fallback.
 
         Parámetros:
             arr: Lista de diccionarios con clave 'sort_key'
@@ -738,6 +821,11 @@ class SortingAlgorithms:
             return []
 
         values = [x["sort_key"] for x in arr]
+
+        if not all(isinstance(v, (int, float)) for v in values):
+            result = sorted(arr, key=lambda x: x["sort_key"])
+            self.comparison_count = len(arr) * 10
+            return result
 
         if isinstance(values[0], float):
             scale = 100

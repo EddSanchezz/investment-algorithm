@@ -31,22 +31,20 @@ class InvestmentPipeline:
     Complejidad total del pipeline: Dominada por ETL O(n*d) y ordenamiento O(a*n*log*n)
     """
 
-    COLOMBIAN_STOCKS = [
-        "ECOPETROL",
-        "ISA",
-        "GEB",
-        "PFCEM",
-        "CELSIA",
-        "ECOPETROL",
-        "ISA",
-        "NUTRESA",
-        "CEMENTOS",
-        "ARGOS",
-        "PFBCOLOM",
-        "BBVACOL",
-    ]
+    COLOMBIAN_STOCKS = ["ISA", "GEB"]
 
-    INTERNATIONAL_ETFS = ["VOO", "CSPX", "VTI", "QQQ", "SPY", "VEA", "VWO", "BND"]
+    INTERNATIONAL_ETFS = [
+        "VOO",
+        "VTI",
+        "QQQ",
+        "SPY",
+        "VEA",
+        "VWO",
+        "BND",
+        "EFA",
+        "EEM",
+        "TLT",
+    ]
 
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
@@ -254,11 +252,35 @@ class InvestmentPipeline:
 
 def main():
     """Función principal de ejecución."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Pipeline de análisis de algoritmos para datos financieros"
+    )
+    parser.add_argument(
+        "--sample",
+        action="store_true",
+        help="Usar datos de ejemplo en lugar de descargar datos reales",
+    )
+    parser.add_argument(
+        "--symbols",
+        nargs="+",
+        help="Lista de símbolos a descargar (ej: --symbols VOO ECOPETROL)",
+    )
+    parser.add_argument(
+        "--years",
+        type=int,
+        default=5,
+        help="Años de historial a descargar (default: 5)",
+    )
+
+    args = parser.parse_args()
+
     pipeline = InvestmentPipeline()
 
-    use_sample = input("¿Usar datos de ejemplo? (s/n): ").lower() == "s"
-
-    if use_sample:
+    if args.symbols:
+        records = pipeline.run_etl(symbols=args.symbols, years=args.years)
+    elif args.sample:
         records = pipeline.run_etl()
     else:
         records = pipeline.run_etl()

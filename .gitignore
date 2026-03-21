@@ -24,3 +24,5 @@ data/processed/*.png
 *.swo
 *~
 .DS_Store
+*.csv
+*.png

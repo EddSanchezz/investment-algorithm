@@ -70,10 +70,17 @@ class FinancialDataFetcher:
                 if not result:
                     return []
 
-                timestamps = result[0]["timestamp"]
-                quote = result[0]["indicators"]["quote"][0]
+                result_data = result[0]
+
+                if "timestamp" not in result_data:
+                    return []
+
+                timestamps = result_data["timestamp"]
+                quote = result_data.get("indicators", {}).get("quote", [{}])[0]
 
                 for i, ts in enumerate(timestamps):
+                    if quote["open"][i] is None:
+                        continue
                     record = {
                         "date": datetime.fromtimestamp(ts).strftime("%Y-%m-%d"),
                         "symbol": symbol,
@@ -87,7 +94,12 @@ class FinancialDataFetcher:
 
                 return records
 
-            except requests.exceptions.RequestException as e:
+            except (
+                requests.exceptions.RequestException,
+                KeyError,
+                TypeError,
+                IndexError,
+            ) as e:
                 if attempt < self.MAX_RETRIES - 1:
                     time.sleep(self.RETRY_DELAY * (attempt + 1))
                 else:

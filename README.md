@@ -22,13 +22,16 @@ investment-algorithm/
 │   │   ├── algorithms.py         # 12 algoritmos implementados
 │   │   ├── comparator.py        # Benchmark y comparaciones
 │   │   └── visualizer.py        # Generación de gráficos
-│   └── services/                 # Microservicio de Análisis
-│       ├── volume_analyzer.py    # Análisis de volumen
-│       └── main_runner.py        # Orquestador principal
+│   ├── services/                 # Microservicio de Análisis
+│   │   ├── volume_analyzer.py    # Análisis de volumen
+│   │   └── main_runner.py        # Orquestador principal
+│   └── api/                      # API REST
+│       └── gateway.py            # Endpoints REST
 ├── data/
 │   ├── raw/                      # Datos sin procesar
-│   └── processed/                # Datos unificados
+│   └── processed/                # Datos unificados y gráficos
 ├── tests/                        # Pruebas unitarias
+├── Taskfile.yml                  # Tareas automatizadas
 ├── requirements.txt              # Dependencias Python
 ├── docker-compose.yml            # Orquestación Docker
 └── README.md                     # Este archivo
@@ -138,9 +141,33 @@ def heapsort(self, arr):
 
 ### Requisitos Previos
 - Python 3.10+
+- [Taskfile](https://taskfile.dev/) (opcional, pero recomendado)
 - Docker y Docker Compose (opcional)
 
-### Instalación Local
+### Instalación Rápida con Taskfile
+
+```bash
+# 1. Instalar Taskfile (ver https://taskfile.dev/#/installation)
+
+# 2. Ejecutar con un solo comando
+task install    # Crea entorno virtual e instala dependencias
+task run        # Ejecuta el pipeline completo
+```
+
+### Comandos Disponibles
+
+| Comando | Descripción |
+|---------|-------------|
+| `task install` | Crea entorno virtual (.venv) e instala dependencias |
+| `task run` | Ejecuta pipeline con datos de ejemplo |
+| `task run-full` | Ejecuta pipeline descargando datos reales |
+| `task api` | Inicia el servidor API REST |
+| `task test` | Ejecuta pruebas unitarias |
+| `task clean` | Limpia archivos generados y caches |
+| `task build` | Construye imágenes Docker |
+| `task lint` | Ejecuta linter de código |
+
+### Instalación Manual (sin Taskfile)
 
 ```bash
 # Clonar el repositorio
@@ -150,20 +177,30 @@ cd investment-algorithm
 # Crear entorno virtual
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
+.venv\Scripts\activate     # Windows
 
 # Instalar dependencias
 pip install -r requirements.txt
+
+# Ejecutar pipeline
+python -m src.services.main_runner --sample
 ```
 
-### Ejecución
+### Ejecución con Opciones
 
 ```bash
-# Ejecutar pipeline completo
-python -m src.services.main_runner
+# Usar datos de ejemplo (más rápido)
+task run
 
-# Generar datos de ejemplo
-python -m src.services.main_runner --sample
+# Descargar datos reales (tarda más)
+task run-full
+
+# Especificar símbolos
+python -m src.services.main_runner --symbols VOO SPY QQQ --years 3
+
+# Iniciar API REST
+task api
+# API disponible en http://localhost:5000
 ```
 
 ### Uso con Docker
