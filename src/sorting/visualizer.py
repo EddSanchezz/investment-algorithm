@@ -95,6 +95,7 @@ class SortingVisualizer:
     ) -> None:
         """
         Genera gráfico comparativo mostrando complejidad teórica vs tiempo real.
+        Los nombres se alternan izquierda/derecha para evitar solapamiento.
 
         Parámetros:
             results: Lista de resultados de benchmarking
@@ -116,7 +117,7 @@ class SortingVisualizer:
 
         complexity_order = [complexity_map.get(r["complexity"], 0) for r in results]
 
-        fig, ax = plt.subplots(figsize=(12, 6))
+        fig, ax = plt.subplots(figsize=(14, 8))
 
         scatter_colors = [
             self.colors[i % len(self.colors)] for i in range(len(results))
@@ -126,14 +127,23 @@ class SortingVisualizer:
             zip(algorithms, times, complexity_order)
         ):
             ax.scatter(order, time_val, c=scatter_colors[i], s=200, zorder=5)
+
+            if i % 2 == 0:
+                ha = "right"
+                x_offset = -15
+            else:
+                ha = "left"
+                x_offset = 15
+
             ax.annotate(
                 alg,
                 (order, time_val),
                 textcoords="offset points",
-                xytext=(0, 10),
-                ha="center",
-                fontsize=8,
-                rotation=15,
+                xytext=(x_offset, 10),
+                ha=ha,
+                fontsize=9,
+                fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
             )
 
         ax.set_xlabel("Complejidad Teórica (orden)", fontsize=12)
@@ -144,6 +154,8 @@ class SortingVisualizer:
             ["O(n)", "O(n log n)", "O(log² n)", "O(n+k)", "O(nk)", "O(n²)"]
         )
         ax.grid(True, alpha=0.3)
+
+        ax.set_xlim(0.5, 6.5)
 
         plt.tight_layout()
 
