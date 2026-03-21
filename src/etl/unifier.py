@@ -1,125 +1,154 @@
-"""Data unifier for combining multiple assets into a single dataset
-
-Maneja diferencias entre calendarios bursátiles, días festivos
-y desalineaciones temporales entre fuentes.
+"""
+Unifier Module - Unificación de datasets financieros.
+Este módulo implementa la capa de carga del proceso ETL.
+Combina datos de múltiples fuentes manteniendo integridad temporal.
 """
 
-from typing import Optional
+from typing import List, Dict, Tuple
 from datetime import datetime
-from dataclasses import dataclass
-
-from ..utils.constants import (
-    DATE_COL,
-    OPEN_COL,
-    HIGH_COL,
-    LOW_COL,
-    CLOSE_COL,
-    VOLUME_COL,
-    SYMBOL_COL,
-)
-
-
-@dataclass
-class UnificationReport:
-    """Reporte del proceso de unificación"""
-
-    total_assets: int
-    total_records: int
-    date_range_start: Optional[str]
-    date_range_end: Optional[str]
-    records_per_asset: dict[str, int]
+import csv
+import os
 
 
 class DataUnifier:
-    """Clase para unificar datasets de múltiples activos"""
+    """
+    Unificador de datos financieros de múltiples activos.
 
-    def __init__(self):
-        self.report: Optional[UnificationReport] = None
+    Funcionalidades:
+    - Combina datos de múltiples símbolos en un solo dataset
+    - Ordena por fecha para mantener integridad temporal
+    - Valida consistencia entre registros
+    - Genera estadísticas del dataset unificado
 
-    def unify_records(self, records: list[dict]) -> list[dict]:
-        """Unifica registros de múltiples activos en un solo dataset"""
-        if not records:
-            return []
+    Complejidad temporal: O(n log n) dominada por el ordenamiento
+    Complejidad espacial: O(n) para almacenar el dataset unificado
+    """
 
-        records = self._sort_by_date_and_symbol(records)
-        records = self._fill_missing_dates(records)
+    REQUIRED_FIELDS = ["date", "symbol", "open", "high", "low", "close", "volume"]
 
-        self._generate_report(records)
+    def validate_record(self, record: Dict) -> bool:
+        """
+        Valida que un registro tenga todos los campos requeridos y valores válidos.
+
+        Parámetros:
+            record: Diccionario con datos del registro
+
+        Retorna:
+            True si el registro es válido, False en caso contrario
+
+        Complejidad: O(f) donde f = número de campos requeridos (7)
+        """
+        for field in self.REQUIRED_FIELDS:
+            if field not in record:
+                return False
+            if record[field] is None:
+                return False
+
+        if record["close"] <= 0 or record["volume"] < 0:
+            return False
+
+        return True
+
+    def unify_datasets(self, datasets: List[List[Dict]]) -> List[Dict]:
+        """
+        Combina múltiples datasets en uno solo.
+
+        Parámetros:
+            datasets: Lista de listas de registros (cada lista es un activo)
+
+        Retorna:
+            Dataset unificado con todos los registros
+
+        Complejidad: O(n) para concatenar + O(n log n) para ordenar
+        El ordenamiento es necesario para mantener la integridad temporal
+        """
+        all_records = []
+
+        for dataset in datasets:
+            for record in dataset:
+                if self.validate_record(record):
+                    all_records.append(record)
+
+        all_records.sort(key=lambda x: (x["date"], x["close"]))
+
+        return all_records
+
+    def load_from_csv(self, filepath: str) -> List[Dict]:
+        """
+        Carga registros desde un archivo CSV.
+
+        Parámetros:
+            filepath: Ruta del archivo CSV
+
+        Retorna:
+            Lista de diccionarios con los datos
+
+        Complejidad: O(n) donde n = número de registros en el CSV
+        """
+        records = []
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                record = {
+                    "date": row["date"],
+                    "symbol": row["symbol"],
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
+                    "volume": int(row["volume"]),
+                }
+                if self.validate_record(record):
+                    records.append(record)
 
         return records
 
-    def _sort_by_date_and_symbol(self, records: list[dict]) -> list[dict]:
-        """Ordena por fecha (ascendente), luego por símbolo"""
-        return sorted(records, key=lambda x: (x[DATE_COL], x[SYMBOL_COL]))
+    def save_to_csv(self, records: List[Dict], filepath: str) -> None:
+        """
+        Guarda registros en un archivo CSV unificado.
 
-    def _fill_missing_dates(self, records: list[dict]) -> list[dict]:
-        """Rellena fechas faltantes usando interpolación"""
+        Parámetros:
+            records: Lista de registros
+            filepath: Ruta del archivo de salida
+
+        Complejidad: O(n) para escritura de n registros
+        """
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self.REQUIRED_FIELDS)
+            writer.writeheader()
+            writer.writerows(records)
+
+        print(f"Dataset unificado guardado en {filepath} ({len(records)} registros)")
+
+    def generate_statistics(self, records: List[Dict]) -> Dict:
+        """
+        Genera estadísticas descriptivas del dataset unificado.
+
+        Parámetros:
+            records: Lista de registros financieros
+
+        Retorna:
+            Diccionario con estadísticas (símbolos, registros, rango de fechas)
+
+        Complejidad: O(n) para recorrer todos los registros
+        """
         if not records:
-            return []
+            return {"total_records": 0}
 
-        all_dates = sorted(set(r[DATE_COL] for r in records))
-        symbols = sorted(set(r[SYMBOL_COL] for r in records))
+        symbols = set(r["symbol"] for r in records)
+        dates = [r["date"] for r in records]
 
-        complete_records = []
-        records_by_symbol = self._group_by_symbol(records)
+        total_volume = sum(r["volume"] for r in records)
+        avg_volume = total_volume / len(records)
 
-        for symbol in symbols:
-            symbol_records = records_by_symbol.get(symbol, [])
-            symbol_dates = set(r[DATE_COL] for r in symbol_records)
-
-            for date in all_dates:
-                if date in symbol_dates:
-                    record = next(r for r in symbol_records if r[DATE_COL] == date)
-                    complete_records.append(record)
-                else:
-                    complete_records.append(
-                        {
-                            DATE_COL: date,
-                            SYMBOL_COL: symbol,
-                            OPEN_COL: None,
-                            HIGH_COL: None,
-                            LOW_COL: None,
-                            CLOSE_COL: None,
-                            VOLUME_COL: 0,
-                        }
-                    )
-
-        return sorted(complete_records, key=lambda x: (x[DATE_COL], x[SYMBOL_COL]))
-
-    def _group_by_symbol(self, records: list[dict]) -> dict[str, list[dict]]:
-        """Agrupa registros por símbolo"""
-        grouped = {}
-        for record in records:
-            symbol = record[SYMBOL_COL]
-            if symbol not in grouped:
-                grouped[symbol] = []
-            grouped[symbol].append(record)
-        return grouped
-
-    def _generate_report(self, records: list[dict]) -> None:
-        """Genera reporte de unificación"""
-        if not records:
-            self.report = None
-            return
-
-        symbols = sorted(set(r[SYMBOL_COL] for r in records))
-        records_per_asset = {}
-
-        for symbol in symbols:
-            records_per_asset[symbol] = sum(
-                1 for r in records if r[SYMBOL_COL] == symbol
-            )
-
-        dates = sorted(set(r[DATE_COL] for r in records))
-
-        self.report = UnificationReport(
-            total_assets=len(symbols),
-            total_records=len(records),
-            date_range_start=dates[0] if dates else None,
-            date_range_end=dates[-1] if dates else None,
-            records_per_asset=records_per_asset,
-        )
-
-    def get_report(self) -> Optional[UnificationReport]:
-        """Retorna el reporte de unificación"""
-        return self.report
+        return {
+            "total_records": len(records),
+            "unique_symbols": len(symbols),
+            "symbols": sorted(list(symbols)),
+            "date_range": (min(dates), max(dates)),
+            "total_volume": total_volume,
+            "average_volume": avg_volume,
+        }

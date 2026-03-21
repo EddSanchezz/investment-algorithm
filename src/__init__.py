@@ -1,4 +1,4 @@
-"""Investment Algorithm - Financial Data Analysis Project"""
-
-__version__ = "1.0.0"
-__author__ = "Algorithm Analysis 2026-1"
+"""
+Investment Algorithm Project
+Módulo principal del proyecto de análisis de algoritmos aplicado a finanzas.
+"""

@@ -1,201 +1,257 @@
-"""Data cleaner for handling missing values and anomalies
-
-Implementa técnicas de limpieza: interpolación, eliminación de registros
-y corrección de valores inconsistentes.
+"""
+Cleaner Module - Transformación y limpieza de datos financieros.
+Este módulo implementa la capa de transformación del proceso ETL.
+Incluye detección y manejo de valores faltantes, anomalías e inconsistencias.
 """
 
-from typing import Optional
-from dataclasses import dataclass
-
-from ..utils.constants import (
-    DATE_COL,
-    OPEN_COL,
-    HIGH_COL,
-    LOW_COL,
-    CLOSE_COL,
-    VOLUME_COL,
-    SYMBOL_COL,
-)
-
-
-@dataclass
-class DataQualityReport:
-    """Reporte de calidad de datos después de la limpieza"""
-
-    original_count: int
-    final_count: int
-    missing_values_filled: int
-    outliers_removed: int
-    duplicates_removed: int
+from typing import List, Dict, Tuple, Optional
+from datetime import datetime
+import statistics
 
 
 class DataCleaner:
-    """Clase para limpiar y validar datos financieros"""
+    """
+    Limpiador de datos financieros con técnicas de detección y corrección.
+
+    Detecta y maneja:
+    - Valores faltantes (NaN, None)
+    - Valores atípicos (anomalías)
+    - Registros inconsistentes
+    - Duplicados
+
+    Complejidad temporal: O(n) para detección, O(n) para interpolación
+    Complejidad espacial: O(n) para almacenamiento temporal
+    """
+
+    Z_SCORE_THRESHOLD = 3.0
 
     def __init__(self):
-        self.quality_report: Optional[DataQualityReport] = None
+        self.cleaning_report = {
+            "missing_values": 0,
+            "duplicates": 0,
+            "outliers": 0,
+            "interpolations": 0,
+            "deletions": 0,
+        }
 
-    def clean_dataset(self, records: list[dict]) -> list[dict]:
-        """Pipeline completo de limpieza de datos"""
-        original_count = len(records)
+    def detect_missing_values(self, records: List[Dict]) -> List[int]:
+        """
+        Detecta registros con valores faltantes en campos numéricos.
 
-        records = self._remove_duplicates(records)
-        records = self._interpolate_missing_values(records)
-        records = self._remove_outliers(records)
-        records = self._validate_price_consistency(records)
+        Parámetros:
+            records: Lista de registros financieros
 
-        duplicates_removed = original_count - len(records)
+        Retorna:
+            Índices de registros con valores faltantes
 
-        self.quality_report = DataQualityReport(
-            original_count=original_count,
-            final_count=len(records),
-            missing_values_filled=0,
-            outliers_removed=0,
-            duplicates_removed=duplicates_removed,
-        )
+        Complejidad: O(n * f) donde n = registros, f = campos a verificar
+        Se verifica cada campo numérico en cada registro
+        """
+        missing_indices = []
+        numeric_fields = ["open", "high", "low", "close", "volume"]
 
-        return records
+        for idx, record in enumerate(records):
+            for field in numeric_fields:
+                value = record.get(field)
+                if value is None or (isinstance(value, float) and value != value):
+                    missing_indices.append(idx)
+                    self.cleaning_report["missing_values"] += 1
+                    break
 
-    def _remove_duplicates(self, records: list[dict]) -> list[dict]:
-        """Elimina registros duplicados basados en fecha y símbolo"""
+        return missing_indices
+
+    def detect_duplicates(self, records: List[Dict]) -> List[int]:
+        """
+        Detecta registros duplicados basándose en fecha y símbolo.
+
+        Parámetros:
+            records: Lista de registros financieros
+
+        Retorna:
+            Índices de registros duplicados (excepto el primero)
+
+        Complejidad: O(n) usando tabla hash para deduplicación
+        """
         seen = set()
-        unique_records = []
+        duplicate_indices = []
 
-        for record in records:
-            key = (record[DATE_COL], record[SYMBOL_COL])
-            if key not in seen:
+        for idx, record in enumerate(records):
+            key = (record["date"], record["symbol"])
+            if key in seen:
+                duplicate_indices.append(idx)
+                self.cleaning_report["duplicates"] += 1
+            else:
                 seen.add(key)
-                unique_records.append(record)
 
-        return unique_records
+        return duplicate_indices
 
-    def _interpolate_missing_values(self, records: list[dict]) -> list[dict]:
-        """Interpolación lineal para valores faltantes en series de tiempo"""
-        cleaned = []
-        missing_filled = 0
+    def detect_outliers_zscore(
+        self, records: List[Dict], field: str = "close"
+    ) -> List[int]:
+        """
+        Detecta valores atípicos usando el método Z-Score.
 
-        grouped = self._group_by_symbol(records)
+        Un valor se considera atípico si |z| > threshold (default 3.0)
 
-        for symbol, symbol_records in grouped.items():
-            sorted_records = sorted(symbol_records, key=lambda x: x[DATE_COL])
+        Parámetros:
+            records: Lista de registros financieros
+            field: Campo numérico a analizar
 
-            for i, record in enumerate(sorted_records):
-                new_record = record.copy()
+        Retorna:
+            Índices de registros con valores atípicos
 
-                for col in [OPEN_COL, HIGH_COL, LOW_COL, CLOSE_COL]:
-                    if record.get(col) is None or record[col] == "":
-                        value = self._interpolate_value(sorted_records, i, col)
-                        if value is not None:
-                            new_record[col] = value
-                            missing_filled += 1
+        Complejidad: O(n) - dos pasadas: cálculo de media/desviación y detección
+        """
+        values = [r[field] for r in records if r.get(field) is not None]
 
-                if record.get(VOLUME_COL) is None or record[VOLUME_COL] == "":
-                    value = self._interpolate_value(sorted_records, i, VOLUME_COL)
-                    if value is not None:
-                        new_record[VOLUME_COL] = int(value)
-                        missing_filled += 1
+        if len(values) < 3:
+            return []
 
-                cleaned.append(new_record)
+        mean = statistics.mean(values)
+        stdev = statistics.stdev(values)
 
-        if self.quality_report:
-            self.quality_report.missing_values_filled = missing_filled
+        if stdev == 0:
+            return []
+
+        outlier_indices = []
+        for idx, record in enumerate(records):
+            value = record.get(field)
+            if value is not None:
+                z_score = abs((value - mean) / stdev)
+                if z_score > self.Z_SCORE_THRESHOLD:
+                    outlier_indices.append(idx)
+                    self.cleaning_report["outliers"] += 1
+
+        return outlier_indices
+
+    def interpolate_missing(
+        self, records: List[Dict], field: str, indices: List[int]
+    ) -> List[Dict]:
+        """
+        Interpola valores faltantes usando interpolación lineal.
+
+        La interpolación lineal estima valores desconocidos usando la relación
+        entre puntos vecinos: value = y1 + (y2 - y1) * ((x - x1) / (x2 - x1))
+
+        Justificación algorítmica:
+        - Preserva la longitud del dataset (importante para series temporales)
+        - Mantiene tendencias sin introducir discontinuidades
+        - O(n) para encontrar vecinos + O(1) para interpolar = O(n) total
+
+        Parámetros:
+            records: Lista de registros financieros
+            field: Campo a interpolar
+            indices: Índices con valores faltantes
+
+        Retorna:
+            Copia de registros con valores interpolados
+
+        Complejidad: O(n) donde n = número de registros
+        """
+        if not indices:
+            return records
+
+        records_copy = [r.copy() for r in records]
+        indices_set = set(indices)
+
+        for idx in sorted(indices):
+            prev_idx = None
+            next_idx = None
+
+            for i in range(idx - 1, -1, -1):
+                if i not in indices_set and records_copy[i].get(field) is not None:
+                    prev_idx = i
+                    break
+
+            for i in range(idx + 1, len(records_copy)):
+                if i not in indices_set and records_copy[i].get(field) is not None:
+                    next_idx = i
+                    break
+
+            if prev_idx is not None and next_idx is not None:
+                prev_value = records_copy[prev_idx][field]
+                next_value = records_copy[next_idx][field]
+                records_copy[idx][field] = (prev_value + next_value) / 2
+                self.cleaning_report["interpolations"] += 1
+            elif prev_idx is not None:
+                records_copy[idx][field] = records_copy[prev_idx][field]
+                self.cleaning_report["interpolations"] += 1
+            elif next_idx is not None:
+                records_copy[idx][field] = records_copy[next_idx][field]
+                self.cleaning_report["interpolations"] += 1
+
+        return records_copy
+
+    def remove_duplicates(self, records: List[Dict], indices: List[int]) -> List[Dict]:
+        """
+        Elimina registros duplicados.
+
+        Justificación algorítmica:
+        - Eliminamos duplicados porque cada registro debe ser único
+        - La duplicación afecta el análisis (sobrestimación de volumen, etc.)
+        - O(n) para filtrar usando comprensión de listas
+
+        Parámetros:
+            records: Lista de registros
+            indices: Índices a eliminar
+
+        Retorna:
+            Lista sin duplicados
+
+        Complejidad: O(n) donde n = número de registros
+        """
+        if not indices:
+            return records
+
+        indices_set = set(indices)
+        cleaned = [r for i, r in enumerate(records) if i not in indices_set]
+        self.cleaning_report["deletions"] += len(indices)
 
         return cleaned
 
-    def _interpolate_value(
-        self, records: list[dict], index: int, column: str
-    ) -> Optional[float]:
-        """Interpolación lineal: busca valores válidos antes y después"""
-        prev_value = None
-        next_value = None
+    def clean_records(self, records: List[Dict]) -> Tuple[List[Dict], Dict]:
+        """
+        Pipeline completo de limpieza de datos.
 
-        for i in range(index - 1, -1, -1):
-            if records[i].get(column) not in [None, ""]:
-                prev_value = float(records[i][column])
-                break
+        Orden de operaciones:
+        1. Detectar y eliminar duplicados (primero para no afectar estadísticas)
+        2. Detectar y marcar outliers (para referencia)
+        3. Interpolar valores faltantes (preserva longitud)
 
-        for i in range(index + 1, len(records)):
-            if records[i].get(column) not in [None, ""]:
-                next_value = float(records[i][column])
-                break
+        Justificación del orden:
+        - Duplicados primero: afectan cálculos estadísticos (media, varianza)
+        - Outliers después: basados en estadísticas ya corregidas
+        - Interpolación último: usa contexto temporal completo
 
-        if prev_value is not None and next_value is not None:
-            return (prev_value + next_value) / 2
-        elif prev_value is not None:
-            return prev_value
-        elif next_value is not None:
-            return next_value
+        Parámetros:
+            records: Lista de registros financieros
 
-        return None
+        Retorna:
+            Tupla (registros limpiados, reporte de limpieza)
 
-    def _remove_outliers(self, records: list[dict]) -> list[dict]:
-        """Elimina outliers usando el método IQR (Interquartile Range)"""
-        grouped = self._group_by_symbol(records)
-        cleaned = []
-        outliers_removed = 0
+        Complejidad total: O(n) + O(n) + O(n) = O(n)
+        Dominada por las operaciones lineales sobre los datos
+        """
+        self.cleaning_report = {
+            "missing_values": 0,
+            "duplicates": 0,
+            "outliers": 0,
+            "interpolations": 0,
+            "deletions": 0,
+        }
 
-        for symbol, symbol_records in grouped.items():
-            for col in [CLOSE_COL, VOLUME_COL]:
-                values = [
-                    r[col] for r in symbol_records if r.get(col) not in [None, ""]
-                ]
-                if not values:
-                    continue
+        duplicate_indices = self.detect_duplicates(records)
+        cleaned = self.remove_duplicates(records, duplicate_indices)
 
-                sorted_values = sorted(values)
-                q1_idx = len(sorted_values) // 4
-                q3_idx = 3 * len(sorted_values) // 4
-                q1 = sorted_values[q1_idx]
-                q3 = sorted_values[q3_idx]
-                iqr = q3 - q1
+        missing_indices = self.detect_missing_values(cleaned)
 
-                lower_bound = q1 - 1.5 * iqr
-                upper_bound = q3 + 1.5 * iqr
+        outlier_indices = self.detect_outliers_zscore(cleaned, "close")
 
-                for record in symbol_records:
-                    if lower_bound <= record[col] <= upper_bound:
-                        cleaned.append(record)
-                    else:
-                        outliers_removed += 1
+        if missing_indices:
+            cleaned = self.interpolate_missing(cleaned, "close", missing_indices)
+            cleaned = self.interpolate_missing(cleaned, "volume", missing_indices)
+            cleaned = self.interpolate_missing(cleaned, "open", missing_indices)
+            cleaned = self.interpolate_missing(cleaned, "high", missing_indices)
+            cleaned = self.interpolate_missing(cleaned, "low", missing_indices)
 
-        if self.quality_report:
-            self.quality_report.outliers_removed = outliers_removed
-
-        return cleaned
-
-    def _validate_price_consistency(self, records: list[dict]) -> list[dict]:
-        """Verifica que High >= Low y que Open/Close estén en el rango [Low, High]"""
-        valid_records = []
-
-        for record in records:
-            high = record[HIGH_COL]
-            low = record[LOW_COL]
-            open_price = record[OPEN_COL]
-            close = record[CLOSE_COL]
-
-            if high < low:
-                continue
-
-            if not (low <= open_price <= high):
-                record[OPEN_COL] = max(low, min(high, open_price))
-
-            if not (low <= close <= high):
-                record[CLOSE_COL] = max(low, min(high, close))
-
-            valid_records.append(record)
-
-        return valid_records
-
-    def _group_by_symbol(self, records: list[dict]) -> dict[str, list[dict]]:
-        """Agrupa registros por símbolo"""
-        grouped = {}
-        for record in records:
-            symbol = record[SYMBOL_COL]
-            if symbol not in grouped:
-                grouped[symbol] = []
-            grouped[symbol].append(record)
-        return grouped
-
-    def get_quality_report(self) -> Optional[DataQualityReport]:
-        """Retorna el reporte de calidad de datos"""
-        return self.quality_report
+        return cleaned, self.cleaning_report.copy()

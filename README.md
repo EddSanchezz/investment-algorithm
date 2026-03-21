@@ -1,261 +1,243 @@
-# Investment Algorithm - Financial Data Analysis
+# Investment Algorithm - Análisis de Algoritmos
 
-A quantitative analysis project focused on financial time series from the Colombian Stock Exchange (BVC) and global assets, implementing classical sorting algorithms with formal complexity analysis.
+## Descripción del Proyecto
 
-## Table of Contents
+Este proyecto implementa un sistema de análisis algorítmico aplicado a datos financieros, desarrollado como parte del curso de Análisis de Algoritmos en la Universidad del Quindío.
 
-- [Overview](#overview)
-- [Features](#features)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Requirements](#requirements)
-- [API Data Sources](#api-data-sources)
-- [Sorting Algorithms](#sorting-algorithms)
-- [Complexity Analysis](#complexity-analysis)
-- [Testing](#testing)
-- [License](#license)
-- [Authors](#authors)
+El sistema procesa datos históricos de activos financieros (acciones y ETFs) y demuestra el análisis formal de complejidad algorítmica mediante la implementación de 12 algoritmos de ordenamiento y análisis de volumen de negociación.
 
-## Overview
+## Arquitectura del Sistema
 
-This project implements an automated ETL pipeline for financial data extraction and performs algorithmic analysis on historical stock prices, returns, and volatility. The system downloads and processes data for a portfolio of at least 20 assets with a minimum of 5 years of historical data.
-
-## Features
-
-- **Automated ETL Pipeline**: Extract, transform, and load financial data from public APIs
-- **Data Cleaning**: Handle missing values, inconsistencies, and anomalies
-- **12 Sorting Algorithms**: Implementations with formal complexity analysis
-- **Time Series Analysis**: Performance comparison with visualizations
-- **Volume Analysis**: Top 15 trading days identification
-- **Multi-Asset Portfolio**: Colombian stocks (ECOPETROL, ISA, GEB) and global ETFs (VOO, CSPX)
-
-## Project Structure
+El proyecto sigue una **arquitectura de microservicios modular** donde cada componente es un módulo independiente de Python que puede ejecutarse de forma autónoma:
 
 ```
 investment-algorithm/
-├── README.md
-├── requirements.txt
-├── .gitignore
 ├── src/
 │   ├── __init__.py
-│   ├── main.py                 # Entry point
-│   ├── etl/
-│   │   ├── __init__.py
-│   │   ├── fetcher.py          # Data fetching from APIs
-│   │   ├── cleaner.py          # Data cleaning utilities
-│   │   ├── unifier.py          # Dataset unification
-│   │   └── validator.py        # Data validation
-│   ├── sorting/
-│   │   ├── __init__.py
-│   │   ├── bubble_sort.py      # Bubble Sort O(n²)
-│   │   ├── selection_sort.py   # Selection Sort O(n²)
-│   │   ├── insertion_sort.py   # Insertion Sort O(n²)
-│   │   ├── merge_sort.py       # Merge Sort O(n log n)
-│   │   ├── quick_sort.py       # Quick Sort O(n log n)
-│   │   ├── heap_sort.py        # Heap Sort O(n log n)
-│   │   ├── shell_sort.py       # Shell Sort O(n²) / O(n log² n)
-│   │   ├── counting_sort.py    # Counting Sort O(n + k)
-│   │   ├── radix_sort.py       # Radix Sort O(nk)
-│   │   ├── cocktail_sort.py    # Cocktail Sort O(n²)
-│   │   ├── comb_sort.py        # Comb Sort O(n²)
-│   │   └── tim_sort.py         # Tim Sort O(n log n)
-│   ├── analysis/
-│   │   ├── __init__.py
-│   │   ├── time_analyzer.py    # Timing utilities
-│   │   └── performance_table.py # Results table generator
-│   ├── visualization/
-│   │   ├── __init__.py
-│   │   └── bar_chart.py        # Bar chart generator
-│   └── utils/
-│       ├── __init__.py
-│       └── constants.py        # Configuration constants
-├── tests/
-│   ├── __init__.py
-│   ├── test_sorting.py         # Sorting algorithm tests
-│   ├── test_etl.py             # ETL pipeline tests
-│   └── test_integration.py     # Integration tests
+│   ├── etl/                      # Microservicio ETL
+│   │   ├── fetcher.py            # Obtención de datos HTTP
+│   │   ├── cleaner.py            # Limpieza y transformación
+│   │   └── unifier.py            # Unificación de datasets
+│   ├── sorting/                  # Microservicio de Ordenamiento
+│   │   ├── algorithms.py         # 12 algoritmos implementados
+│   │   ├── comparator.py        # Benchmark y comparaciones
+│   │   └── visualizer.py        # Generación de gráficos
+│   └── services/                 # Microservicio de Análisis
+│       ├── volume_analyzer.py    # Análisis de volumen
+│       └── main_runner.py        # Orquestador principal
 ├── data/
-│   └── (raw and processed data)
-└── output/
-    ├── sorting_results.csv     # Timing results
-    ├── bar_chart.png           # Visualization output
-    └── analysis_report.txt     # Text report
+│   ├── raw/                      # Datos sin procesar
+│   └── processed/                # Datos unificados
+├── tests/                        # Pruebas unitarias
+├── requirements.txt              # Dependencias Python
+├── docker-compose.yml            # Orquestación Docker
+└── README.md                     # Este archivo
 ```
 
-## Installation
+## Requerimientos Funcionales
 
-### Prerequisites
+### Requerimiento 1: Proceso ETL Automatizado
 
-- Python 3.9+
-- pip package manager
+El sistema implementa un proceso ETL completamente automatizado:
 
-### Setup
+#### 1.1 Extracción de Datos (fetcher.py)
+
+```python
+class FinancialDataFetcher:
+    def fetch_historical_data(self, symbol, start_date, end_date) -> List[Dict]
+    def fetch_multiple_assets(self, symbols, years) -> List[Dict]
+```
+
+- **Fuente de datos**: Yahoo Finance API (HTTP directo)
+- **Historial**: 5 años de datos diarios por activo
+- **Campos**: Date, Open, High, Low, Close, Volume
+- **Complejidad**: O(n × d) donde n = número de activos, d = días
+
+**Justificación de HTTP directo**: Se usa `requests` en lugar de `yfinance` para cumplir con el requerimiento de peticiones HTTP explícitas y manejo manual de parsing.
+
+#### 1.2 Limpieza de Datos (cleaner.py)
+
+```python
+class DataCleaner:
+    def clean_records(self, records) -> Tuple[List[Dict], Dict]
+```
+
+El proceso de limpieza incluye:
+
+| Técnica | Justificación | Complejidad |
+|---------|---------------|-------------|
+| Eliminación de duplicados | Afectan cálculos estadísticos | O(n) |
+| Interpolación lineal | Preserva longitud de series temporales | O(n) |
+| Detección de outliers (Z-Score) | Identifica anomalías en precios | O(n) |
+
+**Decisiones algorítmicas documentadas en el código fuente.**
+
+#### 1.3 Unificación (unifier.py)
+
+```python
+class DataUnifier:
+    def unify_datasets(self, datasets) -> List[Dict]
+    def generate_statistics(self, records) -> Dict
+```
+
+- Combina datos de múltiples activos
+- Ordena por fecha y precio de cierre
+- Genera estadísticas del dataset
+
+### Requerimiento 2: Análisis de Algoritmos de Ordenamiento
+
+Se implementan **12 algoritmos de ordenamiento** con análisis de complejidad formal:
+
+| # | Algoritmo | Complejidad Promedio | Complejidad Peor Caso |
+|---|-----------|---------------------|------------------------|
+| 1 | TimSort | O(n log n) | O(n log n) |
+| 2 | Comb Sort | O(n²) | O(n²) |
+| 3 | Selection Sort | O(n²) | O(n²) |
+| 4 | Tree Sort | O(n log n) | O(n²) |
+| 5 | Pigeonhole Sort | O(n + k) | O(n + k) |
+| 6 | Bucket Sort | O(n + k) | O(n²) |
+| 7 | QuickSort | O(n log n) | O(n²) |
+| 8 | HeapSort | O(n log n) | O(n log n) |
+| 9 | Bitonic Sort | O(log² n) | O(log² n) |
+| 10 | Gnome Sort | O(n²) | O(n²) |
+| 11 | Binary Insertion Sort | O(n²) | O(n²) |
+| 12 | Radix Sort | O(nk) | O(nk) |
+
+### Análisis Detallado de Complejidades
+
+#### TimSort - O(n log n)
+Combina insertion sort para pequeños bloques con merge sort para combinar resultados. Detecta "runs" naturales en datos parcialmente ordenados.
+
+```python
+def tim_sort(self, arr: list) -> list:
+    # Fase 1: Crear runs con insertion sort O(min_run)
+    # Fase 2: Merge de runs O(log n) × O(n) = O(n log n)
+```
+
+#### QuickSort - O(n log n) promedio
+Usa partición de Lomuto. El pivote se coloca en su posición final.
+
+```python
+def quicksort(self, arr, low, high):
+    if low < high:
+        pivot_idx = partition(low, high)  # O(n) para particionar
+        quicksort(low, pivot_idx - 1)     # O(log n) niveles
+        quicksort(pivot_idx + 1, high)
+```
+
+#### HeapSort - O(n log n) garantizado
+Construye max-heap y extrae el máximo repetidamente.
+
+```python
+def heapsort(self, arr):
+    # Construcción heap: O(n)
+    # Extracción: n × O(log n) = O(n log n)
+```
+
+## Instalación y Uso
+
+### Requisitos Previos
+- Python 3.10+
+- Docker y Docker Compose (opcional)
+
+### Instalación Local
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/investment-algorithm.git
+# Clonar el repositorio
+git clone <repo-url>
 cd investment-algorithm
 
-# Create virtual environment (recommended)
+# Crear entorno virtual
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
 
-# Install dependencies
+# Instalar dependencias
 pip install -r requirements.txt
 ```
 
-## Usage
-
-### Run Full Analysis Pipeline
+### Ejecución
 
 ```bash
-python src/main.py
+# Ejecutar pipeline completo
+python -m src.services.main_runner
+
+# Generar datos de ejemplo
+python -m src.services.main_runner --sample
 ```
 
-### Individual Modules
+### Uso con Docker
 
 ```bash
-# Run ETL pipeline
-python -m src.etl.fetcher
+# Construir imágenes
+docker-compose build
 
-# Run sorting analysis
-python -m src.sorting.bubble_sort
+# Ejecutar contenedores
+docker-compose up
 
-# Generate visualizations
-python -m src.visualization.bar_chart
+# Ver logs
+docker-compose logs -f
 ```
 
-### Command Line Arguments
+## API REST
+
+La API proporciona endpoints para acceder a los resultados:
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/health` | GET | Estado del servicio |
+| `/api/records` | GET | Lista de registros |
+| `/api/records/sorted` | GET | Registros ordenados |
+| `/api/volume/top?n=15` | GET | Top N días por volumen |
+| `/api/sorting/benchmark` | GET | Benchmark de algoritmos |
+| `/api/statistics` | GET | Estadísticas del dataset |
+
+### Ejecutar API
 
 ```bash
-python src/main.py --assets 20 --years 5 --output output/
-python src/main.py --skip-etl --sort-only  # Use cached data
+python -m src.api.gateway
+# API disponible en http://localhost:5000
 ```
 
-## Requirements
+## Análisis de Volumen de Negociación
 
-The project fulfills these academic requirements:
-
-1. **ETL Automation**: Complete automated extraction, transformation, and loading of financial data
-2. **Data Unification**: Unified dataset for 20+ assets with 5+ years of data
-3. **Sorting Analysis**: Analysis of 12 sorting algorithms with performance comparison
-4. **Visualization**: Bar chart representation of sorting times
-5. **Volume Analysis**: Top 15 trading days by volume
-
-### Asset Portfolio
-
-| Symbol | Name | Market |
-|--------|------|--------|
-| ECOPETROL | Ecopetrol S.A. | Colombia |
-| ISA | Interconexión Eléctrica | Colombia |
-| GEB | Grupo Energía Bogotá | Colombia |
-| PFBCOLOM | Preferencial Bancolombia | Colombia |
-| CEMEXLATAM | CEMEX Latam Holdings | Colombia |
-| NUTRESA | Grupo Nutresa | Colombia |
-| VOO | Vanguard S&P 500 ETF | USA |
-| CSPX | iShares Core S&P 500 | USA |
-| EFA | iShares MSCI EAFE | USA |
-| ... | (15+ more assets) | |
-
-## API Data Sources
-
-Data is fetched using direct HTTP requests to public APIs:
-
-- **Yahoo Finance API**: Historical price data via CSV download
-- **Alternative**: Investing.com data scraping (respecting robots.txt)
-
-### Data Fields
-
-Each record contains:
-- `date`: Trading date (YYYY-MM-DD)
-- `open`: Opening price
-- `high`: Highest price
-- `low`: Lowest price
-- `close`: Closing price
-- `volume`: Trading volume
-- `symbol`: Asset ticker symbol
-
-## Sorting Algorithms
-
-| Algorithm | Time Complexity | Space Complexity | Type |
-|-----------|-----------------|------------------|------|
-| Bubble Sort | O(n²) | O(1) | Comparison |
-| Selection Sort | O(n²) | O(1) | Comparison |
-| Insertion Sort | O(n²) / O(n) best | O(1) | Comparison |
-| Merge Sort | O(n log n) | O(n) | Comparison |
-| Quick Sort | O(n log n) / O(n²) worst | O(log n) | Comparison |
-| Heap Sort | O(n log n) | O(1) | Comparison |
-| Shell Sort | O(n²) / O(n log² n) | O(1) | Comparison |
-| Counting Sort | O(n + k) | O(k) | Non-comparison |
-| Radix Sort | O(nk) | O(n + k) | Non-comparison |
-| Cocktail Sort | O(n²) | O(1) | Comparison |
-| Comb Sort | O(n²) / O(n log n) best | O(1) | Comparison |
-| Tim Sort | O(n log n) | O(n) | Hybrid |
-
-## Complexity Analysis
-
-### Bubble Sort (O(n²))
+El sistema identifica los **15 días con mayor volumen** de negociación para todos los activos combinados:
 
 ```python
-def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if arr[j] > arr[j + 1]:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+# Agregación por fecha: O(n)
+# Ordenamiento: O(m log m) donde m = días únicos
+# Total: O(n + m log m)
 ```
 
-- **Best Case**: O(n) when already sorted
-- **Average Case**: O(n²)
-- **Worst Case**: O(n²) when reverse sorted
+## Visualizaciones
 
-### Merge Sort (O(n log n))
+Se generan automáticamente:
 
-```python
-def merge_sort(arr):
-    if len(arr) <= 1:
-        return arr
-    mid = len(arr) // 2
-    left = merge_sort(arr[:mid])
-    right = merge_sort(arr[mid:])
-    return merge(left, right)
-```
+1. **Diagrama de barras** (`sorting_times.png`): Tiempos de cada algoritmo
+2. **Gráfico de complejidad** (`complexity_comparison.png`): Complejidad teórica vs tiempo real
 
-- **Recurrence**: T(n) = 2T(n/2) + Θ(n)
-- **By Master Theorem**: T(n) = Θ(n log n)
+## Restricciones Implementadas
 
-## Testing
+- ❌ No usa `yfinance` o `pandas_datareader`
+- ✅ Usa `requests` para HTTP directo
+- ❌ No usa funciones de ordenamiento de librerías
+- ✅ Implementación explícita de todos los algoritmos
+- ❌ No usa datasets estáticos pre-descargados
+- ✅ Reproducibilidad total del proceso ETL
 
-```bash
-# Run all tests
-pytest tests/
+## Tecnologias Utilizadas
 
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
+- **Python 3.10+**: Lenguaje principal
+- **requests**: Peticiones HTTP
+- **pandas**: Manipulación de datos
+- **matplotlib**: Visualizaciones
+- **Flask**: API REST
+- **Docker**: Contenedores
 
-# Run specific test file
-pytest tests/test_sorting.py -v
-```
+## Autores
 
-### Test Categories
+Desarrollado para el curso de Análisis de Algoritmos - Universidad del Quindío - 2026-1
 
-- **Unit Tests**: Individual algorithm correctness
-- **Integration Tests**: ETL pipeline end-to-end
-- **Performance Tests**: Timing validation
+## Licencia
 
-## License
-
-This project was developed for academic purposes as part of the Algorithm Analysis course at Universidad del Quindío.
-
-## Authors
-
-- **[Your Name]** - Algorithm Analysis 2026-1
-- Universidad del Quindío
-- Programa de Ingeniería de Sistemas y Computación
-
-## Acknowledgments
-
-- Universidad del Quindío - Algorithm Analysis Course
-- Professor: [Professor Name]
-- Course: Análisis de Algoritmos - 2026-1
+Este proyecto es para fines educativos.

@@ -1,158 +1,157 @@
-"""Data fetcher for financial data from public APIs
-
-Descarga datos históricos de Yahoo Finance mediante peticiones HTTP directas.
-No utiliza librerías de alto nivel como yfinance.
+"""
+Fetcher Module - Extracción de datos financieros mediante HTTP directo.
+Este módulo implementa la capa de extracción del proceso ETL.
+No utiliza librerías de alto nivel como yfinance, solo requests para HTTP directo.
 """
 
-import csv
+import requests
 import time
-import urllib.request
-import urllib.parse
-import urllib.error
 from datetime import datetime, timedelta
-from typing import Optional
-from dataclasses import dataclass
-
-from ..utils.constants import (
-    YAHOO_BASE_URL,
-    ASSETS,
-    DATE_COL,
-    OPEN_COL,
-    HIGH_COL,
-    LOW_COL,
-    CLOSE_COL,
-    VOLUME_COL,
-    SYMBOL_COL,
-)
+from typing import List, Dict, Optional, Union
+import csv
+import os
 
 
-@dataclass
-class FinancialRecord:
-    """Representa un registro de datos financieros"""
+class FinancialDataFetcher:
+    """
+    Obtenedor de datos financieros mediante peticiones HTTP directas.
 
-    date: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-    symbol: str
+    Utiliza Yahoo Finance API (no oficial) para obtener datos históricos.
+    Implementa manejo de errores y rate limiting para cumplir buenas prácticas.
 
+    Complejidad temporal de descarga por activo: O(d) donde d = días solicitados
+    Complejidad espacial: O(d) para almacenar los datos descargados
+    """
 
-class DataFetcher:
-    """Clase para descargar datos financieros de Yahoo Finance API"""
+    BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2
 
-    def __init__(self, data_dir: str = "data/raw"):
-        self.data_dir = data_dir
-        self.base_url = YAHOO_BASE_URL
-        self.assets = ASSETS
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update(self.HEADERS)
 
-    def build_url(self, symbol: str, start_date: datetime, end_date: datetime) -> str:
-        """Construye la URL para descargar datos de Yahoo Finance"""
-        params = urllib.parse.urlencode(
-            {
-                "period1": int(start_date.timestamp()),
-                "period2": int(end_date.timestamp()),
-                "interval": "1d",
-                "events": "history",
-            }
-        )
-        return f"{self.base_url}/{symbol}?{params}"
+    def fetch_historical_data(
+        self, symbol: str, start_date: datetime, end_date: datetime
+    ) -> "list[dict]":
+        """
+        Descarga datos históricos para un símbolo financiero.
 
-    def fetch_symbol_data(
-        self, symbol: str, years: int = 5, retries: int = 3, delay: float = 1.0
-    ) -> list[FinancialRecord]:
-        """Descarga datos históricos para un símbolo específico"""
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=years * 365)
+        Parámetros:
+            symbol: Símbolo del activo (ej: 'ECOPETROL', 'VOO')
+            start_date: Fecha inicial del período
+            end_date: Fecha final del período
 
-        url = self.build_url(symbol, start_date, end_date)
-        records = []
+        Retorna:
+            Lista de diccionarios con OHLCV (Open, High, Low, Close, Volume)
 
-        for attempt in range(retries):
+        Complejidad: O(d) donde d es el número de días en el período
+        """
+        url = self.BASE_URL.format(symbol=symbol)
+        params = {
+            "period1": int(start_date.timestamp()),
+            "period2": int(end_date.timestamp()),
+            "interval": "1d",
+            "events": "history",
+        }
+
+        records: List[Dict] = []
+
+        for attempt in range(self.MAX_RETRIES):
             try:
-                request = urllib.request.Request(url)
-                request.add_header("User-Agent", "Mozilla/5.0")
+                response = self.session.get(url, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
 
-                with urllib.request.urlopen(request, timeout=30) as response:
-                    csv_data = response.read().decode("utf-8")
-                    reader = csv.DictReader(csv_data.splitlines())
+                result = data.get("chart", {}).get("result", [])
+                if not result:
+                    return []
 
-                    for row in reader:
-                        if self._is_valid_row(row):
-                            records.append(
-                                FinancialRecord(
-                                    date=row["Date"],
-                                    open=float(row["Open"]),
-                                    high=float(row["High"]),
-                                    low=float(row["Low"]),
-                                    close=float(row["Close"]),
-                                    volume=int(row["Volume"]),
-                                    symbol=symbol,
-                                )
-                            )
+                timestamps = result[0]["timestamp"]
+                quote = result[0]["indicators"]["quote"][0]
+
+                for i, ts in enumerate(timestamps):
+                    record = {
+                        "date": datetime.fromtimestamp(ts).strftime("%Y-%m-%d"),
+                        "symbol": symbol,
+                        "open": quote["open"][i],
+                        "high": quote["high"][i],
+                        "low": quote["low"][i],
+                        "close": quote["close"][i],
+                        "volume": quote["volume"][i],
+                    }
+                    records.append(record)
+
+                return records
+
+            except requests.exceptions.RequestException as e:
+                if attempt < self.MAX_RETRIES - 1:
+                    time.sleep(self.RETRY_DELAY * (attempt + 1))
+                else:
+                    print(
+                        f"Error fetching {symbol} after {self.MAX_RETRIES} attempts: {e}"
+                    )
                     return records
 
-            except urllib.error.HTTPError as e:
-                if e.code == 404:
-                    print(f"Símbolo {symbol} no encontrado")
-                    return []
-                time.sleep(delay * (attempt + 1))
-            except Exception as e:
-                print(f"Error descargando {symbol}: {e}")
-                time.sleep(delay * (attempt + 1))
+    def fetch_multiple_assets(self, symbols: List[str], years: int = 5) -> List[Dict]:
+        """
+        Descarga datos para múltiples activos.
 
-        return records
+        Parámetros:
+            symbols: Lista de símbolos a descargar
+            years: Número de años de historial (default: 5)
 
-    def _is_valid_row(self, row: dict) -> bool:
-        """Verifica si una fila tiene todos los campos necesarios"""
-        required_fields = ["Date", "Open", "High", "Low", "Close", "Volume"]
-        for field in required_fields:
-            if field not in row or row[field] == "null" or row[field] == "":
-                return False
-        return True
+        Retorna:
+            Lista combinada de todos los registros
 
-    def fetch_all_assets(self, years: int = 5) -> list[FinancialRecord]:
-        """Descarga datos para todos los activos configurados"""
+        Complejidad: O(n * d) donde n = número de activos, d = días por activo
+        Se aplica rate limiting entre peticiones para evitar bloqueos
+        """
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365 * years)
+
         all_records = []
+        total = len(symbols)
 
-        for symbol in self.assets:
-            print(f"Descargando {symbol}...")
-            records = self.fetch_symbol_data(symbol, years)
-            all_records.extend(records)
-            print(f"  -> {len(records)} registros obtenidos")
-            time.sleep(0.5)
+        for idx, symbol in enumerate(symbols, 1):
+            print(f"Descargando {symbol} ({idx}/{total})...")
+            records = self.fetch_historical_data(symbol, start_date, end_date)
+
+            if records:
+                all_records.extend(records)
+                print(f"  -> {len(records)} registros obtenidos")
+            else:
+                print(f"  -> Sin datos disponibles")
+
+            if idx < total:
+                time.sleep(0.5)
 
         return all_records
 
-    def save_to_csv(self, records: list[FinancialRecord], filename: str) -> None:
-        """Guarda los registros en un archivo CSV"""
+    def save_to_csv(self, records: List[Dict], filepath: str) -> None:
+        """
+        Guarda los registros en un archivo CSV.
+
+        Parámetros:
+            records: Lista de diccionarios con datos financieros
+            filepath: Ruta del archivo de salida
+
+        Complejidad: O(n) donde n = número de registros
+        """
         if not records:
+            print("No hay datos para guardar")
             return
 
-        with open(filename, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=[
-                    DATE_COL,
-                    OPEN_COL,
-                    HIGH_COL,
-                    LOW_COL,
-                    CLOSE_COL,
-                    VOLUME_COL,
-                    SYMBOL_COL,
-                ],
-            )
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+        fieldnames = ["date", "symbol", "open", "high", "low", "close", "volume"]
+
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            for record in records:
-                writer.writerow(
-                    {
-                        DATE_COL: record.date,
-                        OPEN_COL: record.open,
-                        HIGH_COL: record.high,
-                        LOW_COL: record.low,
-                        CLOSE_COL: record.close,
-                        VOLUME_COL: record.volume,
-                        SYMBOL_COL: record.symbol,
-                    }
-                )
+            writer.writerows(records)
+
+        print(f"Datos guardados en {filepath} ({len(records)} registros)")

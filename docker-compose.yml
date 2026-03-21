@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  etl-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: investment-etl
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.services.main_runner
+    networks:
+      - investment-net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: investment-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.api.gateway
+    depends_on:
+      - etl-service
+    networks:
+      - investment-net
+
+networks:
+  investment-net:
+    driver: bridge
