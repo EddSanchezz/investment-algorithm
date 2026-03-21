@@ -2,39 +2,37 @@ version: '3'
 
 vars:
   VENV_DIR: .venv
-  PYTHON: python
 
 tasks:
   install:
     desc: Crea entorno virtual e instala dependencias
     cmds:
-      - |
-        {{.PYTHON}} -m venv {{.VENV_DIR}}
-        {{if eq OS "windows"}}{{.VENV_DIR}}\Scripts\pip{{else}}{{.VENV_DIR}}/bin/pip{{end}} install -r requirements.txt
+      - python -m venv {{.VENV_DIR}}
+      - pip install -r requirements.txt
 
   run:
     desc: Ejecuta el pipeline principal (usa datos de ejemplo)
+    dir: "{{.ROOT}}"
     cmds:
-      - |
-        {{if eq OS "windows"}}{{.VENV_DIR}}\Scripts\python{{else}}{{.VENV_DIR}}/bin/python{{end}} -m src.services.main_runner --sample
+      - .venv/Scripts/python -m src.services.main_runner --sample
 
   run-full:
     desc: Ejecuta el pipeline principal (descarga datos reales)
+    dir: "{{.ROOT}}"
     cmds:
-      - |
-        {{if eq OS "windows"}}{{.VENV_DIR}}\Scripts\python{{else}}{{.VENV_DIR}}/bin/python{{end}} -m src.services.main_runner
+      - .venv/Scripts/python -m src.services.main_runner
 
   api:
     desc: Inicia el servidor API REST
+    dir: "{{.ROOT}}"
     cmds:
-      - |
-        {{if eq OS "windows"}}{{.VENV_DIR}}\Scripts\python{{else}}{{.VENV_DIR}}/bin/python{{end}} -m src.api.gateway
+      - .venv/Scripts/python -m src.api.gateway
 
   test:
     desc: Ejecuta las pruebas unitarias
+    dir: "{{.ROOT}}"
     cmds:
-      - |
-        {{if eq OS "windows"}}{{.VENV_DIR}}\Scripts\pytest{{else}}{{.VENV_DIR}}/bin/pytest{{end}} -v
+      - .venv/Scripts/pytest -v
 
   clean:
     desc: Limpia archivos generados y caches
@@ -67,9 +65,9 @@ tasks:
 
   lint:
     desc: Ejecuta linter de código
+    dir: "{{.ROOT}}"
     cmds:
-      - |
-        {{if eq OS "windows"}}{{.VENV_DIR}}\Scripts\python{{else}}{{.VENV_DIR}}/bin/python{{end}} -m ruff check src/
+      - .venv/Scripts/python -m ruff check src/
 
   help:
     desc: Muestra esta ayuda
