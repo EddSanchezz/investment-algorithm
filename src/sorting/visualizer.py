@@ -94,68 +94,62 @@ class SortingVisualizer:
         output_path: str = "data/processed/complexity_comparison.png",
     ) -> None:
         """
-        Genera gráfico comparativo mostrando complejidad teórica vs tiempo real.
-        Los nombres se alternan izquierda/derecha para evitar solapamiento.
+        Genera gráfico de barras horizontal ordenando algoritmos por complejidad teórica.
+        Cada barra muestra el tiempo real, permitiendo comparar eficiencia real vs teórica.
 
         Parámetros:
             results: Lista de resultados de benchmarking
             output_path: Ruta donde guardar la imagen
 
-        Complejidad: O(n) para preparación de datos
+        Complejidad: O(n log n) para ordenar por complejidad
         """
-        algorithms = [r["algorithm"] for r in results]
-        times = [r["average_time"] * 1000 for r in results]
-
-        complexity_map = {
-            "O(n)": 1,
-            "O(n log n)": 2,
-            "O(log² n)": 3,
-            "O(n + k)": 4,
-            "O(nk)": 5,
-            "O(n²)": 6,
+        complexity_order_map = {
+            "O(n)": 0,
+            "O(n log n)": 1,
+            "O(log² n)": 2,
+            "O(n + k)": 3,
+            "O(nk)": 4,
+            "O(n²)": 5,
         }
 
-        complexity_order = [complexity_map.get(r["complexity"], 0) for r in results]
+        sorted_results = sorted(
+            results,
+            key=lambda x: (
+                complexity_order_map.get(x["complexity"], 99),
+                x["average_time"],
+            ),
+        )
 
-        fig, ax = plt.subplots(figsize=(14, 8))
+        algorithms = [f"{r['algorithm']} ({r['complexity']})" for r in sorted_results]
+        times = [r["average_time"] * 1000 for r in sorted_results]
+        n = len(algorithms)
 
-        scatter_colors = [
-            self.colors[i % len(self.colors)] for i in range(len(results))
-        ]
+        fig, ax = plt.subplots(figsize=(12, max(10, n * 0.6)))
 
-        for i, (alg, time_val, order) in enumerate(
-            zip(algorithms, times, complexity_order)
-        ):
-            ax.scatter(order, time_val, c=scatter_colors[i], s=200, zorder=5)
+        y_pos = range(n)
+        bars = ax.barh(y_pos, times, color=self.colors[:n])
 
-            if i % 2 == 0:
-                ha = "right"
-                x_offset = -15
-            else:
-                ha = "left"
-                x_offset = 15
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(algorithms, fontsize=10)
+        ax.invert_yaxis()
 
-            ax.annotate(
-                alg,
-                (order, time_val),
-                textcoords="offset points",
-                xytext=(x_offset, 10),
-                ha=ha,
+        for i, (bar, time_val) in enumerate(zip(bars, times)):
+            ax.text(
+                bar.get_width() + max(times) * 0.01,
+                bar.get_y() + bar.get_height() / 2,
+                f"{time_val:.3f} ms",
+                va="center",
                 fontsize=9,
-                fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
             )
 
-        ax.set_xlabel("Complejidad Teórica (orden)", fontsize=12)
-        ax.set_ylabel("Tiempo Real (milisegundos)", fontsize=12)
-        ax.set_title("Complejidad Teórica vs Tiempo Real", fontsize=14)
-        ax.set_xticks([1, 2, 3, 4, 5, 6])
-        ax.set_xticklabels(
-            ["O(n)", "O(n log n)", "O(log² n)", "O(n+k)", "O(nk)", "O(n²)"]
+        ax.set_xlabel("Tiempo de Ejecución (milisegundos)", fontsize=12)
+        ax.set_title(
+            "Algoritmos de Ordenamiento - Ordenados por Complejidad Teórica\n"
+            "O(n)→ más rápido | O(n²)→ más lento",
+            fontsize=12,
         )
-        ax.grid(True, alpha=0.3)
-
-        ax.set_xlim(0.5, 6.5)
+        ax.set_xlim(0, max(times) * 1.25)
+        ax.grid(axis="x", alpha=0.3)
 
         plt.tight_layout()
 
