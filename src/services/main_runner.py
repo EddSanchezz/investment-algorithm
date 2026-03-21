@@ -96,7 +96,7 @@ class InvestmentPipeline:
 
         cleaned_records, report = self.cleaner.clean_records(all_records)
 
-        print(f"Reporte de limpieza:")
+        print("Reporte de limpieza:")
         print(f"  - Valores faltantes detectados: {report['missing_values']}")
         print(f"  - Duplicados eliminados: {report['duplicates']}")
         print(f"  - Outliers detectados: {report['outliers']}")
@@ -111,7 +111,7 @@ class InvestmentPipeline:
         self.unifier.save_to_csv(cleaned_records, unified_file)
 
         stats = self.unifier.generate_statistics(cleaned_records)
-        print(f"\nEstadísticas del dataset unificado:")
+        print("\nEstadísticas del dataset unificado:")
         print(f"  - Total de registros: {stats['total_records']}")
         print(f"  - Símbolos únicos: {stats['unique_symbols']}")
         print(
@@ -143,7 +143,7 @@ class InvestmentPipeline:
         results = self.comparator.compare_all(records, sort_key)
 
         table = self.comparator.generate_table(results)
-        print(f"\nTabla de resultados (orden ascendente por tiempo):")
+        print("\nTabla de resultados (orden ascendente por tiempo):")
         print(table)
 
         self.visualizer.plot_sorting_times(

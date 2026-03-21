@@ -7,7 +7,7 @@ No utiliza librerías de alto nivel como yfinance, solo requests para HTTP direc
 import requests
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Union
+from typing import List, Dict
 import csv
 import os
 
@@ -136,7 +136,7 @@ class FinancialDataFetcher:
                 all_records.extend(records)
                 print(f"  -> {len(records)} registros obtenidos")
             else:
-                print(f"  -> Sin datos disponibles")
+                print("  -> Sin datos disponibles")
 
             if idx < total:
                 time.sleep(0.5)

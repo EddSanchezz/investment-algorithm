@@ -4,8 +4,7 @@ Este módulo implementa la capa de transformación del proceso ETL.
 Incluye detección y manejo de valores faltantes, anomalías e inconsistencias.
 """
 
-from typing import List, Dict, Tuple, Optional
-from datetime import datetime
+from typing import List, Dict, Tuple
 import statistics
 
 
@@ -245,7 +244,7 @@ class DataCleaner:
 
         missing_indices = self.detect_missing_values(cleaned)
 
-        outlier_indices = self.detect_outliers_zscore(cleaned, "close")
+        self.detect_outliers_zscore(cleaned, "close")
 
         if missing_indices:
             cleaned = self.interpolate_missing(cleaned, "close", missing_indices)

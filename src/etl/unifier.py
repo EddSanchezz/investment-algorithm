@@ -4,8 +4,7 @@ Este módulo implementa la capa de carga del proceso ETL.
 Combina datos de múltiples fuentes manteniendo integridad temporal.
 """
 
-from typing import List, Dict, Tuple
-from datetime import datetime
+from typing import List, Dict
 import csv
 import os
 
