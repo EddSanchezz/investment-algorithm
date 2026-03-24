@@ -4,7 +4,6 @@ Main Runner - Orquestador del pipeline ETL y análisis de ordenamiento.
 
 import os
 import sys
-import random
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -56,9 +55,7 @@ class InvestmentPipeline:
         self.volume_analyzer = VolumeAnalyzer()
         self.scraper = None
 
-    def run_etl(
-        self, symbols: list = None, years: int = 5, sample_mode: bool = False
-    ) -> list:
+    def run_etl(self, symbols: list = None, years: int = 5) -> list:
         """
         Ejecuta el proceso ETL completo.
 
@@ -80,25 +77,17 @@ class InvestmentPipeline:
 
         raw_file = os.path.join(self.raw_dir, "raw_data.csv")
 
-        if sample_mode:
-            print("Generando datos de ejemplo...")
-            all_records = self._generate_sample_data(symbols)
-        elif self.use_scraper:
-            try:
-                print("Usando web scraping (Investing.com con Selenium)...")
-                with InvestingScraper(headless=True) as scraper:
-                    all_records = scraper.fetch_multiple_assets(symbols, years)
-            except Exception as e:
-                print(f"Error con scraper: {e}")
-                print("Usando fetcher alternativo...")
-                all_records = self.fetcher.fetch_multiple_assets(symbols, years)
+        if self.use_scraper:
+            print("Usando web scraping (Yahoo Finance API)...")
+            with InvestingScraper() as scraper:
+                all_records = scraper.fetch_multiple_assets(symbols, years)
         else:
-            print("Usando fetcher (Yahoo Finance)...")
+            print("Usando Yahoo Finance API...")
             all_records = self.fetcher.fetch_multiple_assets(symbols, years)
 
         if not all_records:
-            print("No se pudieron obtener datos. Usando datos de ejemplo...")
-            all_records = self._generate_sample_data(symbols)
+            print("ERROR: No se pudieron obtener datos.")
+            return []
 
         self.fetcher.save_to_csv(all_records, raw_file)
 
@@ -246,42 +235,6 @@ class InvestmentPipeline:
             "volume_results": volume_results,
         }
 
-    def _generate_sample_data(self, symbols: list) -> list:
-        """
-        Genera datos de ejemplo para pruebas.
-
-        Parámetros:
-            symbols: Lista de símbolos
-
-        Retorna:
-            Lista de registros de ejemplo
-        """
-        from datetime import datetime, timedelta
-
-        records = []
-        base_date = datetime(2025, 1, 1)
-
-        for symbol in symbols:
-            price = random.uniform(10, 100)
-            for day in range(250):
-                date = base_date + timedelta(days=day)
-                if date.weekday() < 5:
-                    change = random.uniform(-0.05, 0.05)
-                    price = max(1, price * (1 + change))
-
-                    record = {
-                        "date": date.strftime("%Y-%m-%d"),
-                        "symbol": symbol,
-                        "open": price * random.uniform(0.98, 1.0),
-                        "high": price * random.uniform(1.0, 1.05),
-                        "low": price * random.uniform(0.95, 1.0),
-                        "close": price,
-                        "volume": random.randint(100000, 10000000),
-                    }
-                    records.append(record)
-
-        return records
-
 
 def main():
     """Función principal de ejecución."""
@@ -289,11 +242,6 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Pipeline de análisis de algoritmos para datos financieros"
-    )
-    parser.add_argument(
-        "--sample",
-        action="store_true",
-        help="Usar datos de ejemplo en lugar de descargar datos reales",
     )
     parser.add_argument(
         "--symbols",
@@ -313,8 +261,6 @@ def main():
 
     if args.symbols:
         records = pipeline.run_etl(symbols=args.symbols, years=args.years)
-    elif args.sample:
-        records = pipeline.run_etl(sample_mode=True)
     else:
         records = pipeline.run_etl()
 
