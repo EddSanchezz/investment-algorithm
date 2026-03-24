@@ -168,13 +168,12 @@ class InvestmentPipeline:
         return results
 
     def _save_sorting_csv(self, results: list, filepath: str) -> None:
-        """Guarda los resultados de ordenamiento en CSV."""
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, "w", newline="", encoding="utf-8") as f:
-            f.write("Metodo de ordenamiento,Complejidad O(),Tamano,Tiempo (s)\n")
+            f.write("Metodo de ordenamiento,Tamano,Tiempo (s)\n")
             for r in results:
                 f.write(
-                    f"{r['algorithm']},{r['complexity']},{r['size']},{r['average_time']:.6f}\n"
+                    f"{r['algorithm']} {r['complexity']},{r['size']},{r['average_time']:.6f}\n"
                 )
         print(f"Resultados de ordenamiento guardados en {filepath}")
 
