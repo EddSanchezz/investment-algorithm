@@ -14,7 +14,7 @@ tasks:
     desc: Ejecuta el pipeline principal (usa datos de ejemplo)
     dir: "{{.ROOT}}"
     cmds:
-      - .venv/Scripts/python -m src.services.main_runner --sample
+      - .venv/Scripts/python -m src.services.main_runner
 
   run-full:
     desc: Ejecuta el pipeline principal (descarga datos reales)

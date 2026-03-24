@@ -15,8 +15,7 @@ class SortingVisualizer:
     Generador de visualizaciones para resultados de benchmarking.
 
     Crea:
-    - Diagramas de barras de tiempos de algoritmos
-    - Comparativas de complejidad vs tiempo real
+    - Diagramas de barras horizontales ordenados por complejidad teórica
 
     Complejidad de generación de gráficos: O(n) para preparar datos
     """
@@ -144,8 +143,7 @@ class SortingVisualizer:
 
         ax.set_xlabel("Tiempo de Ejecución (milisegundos)", fontsize=12)
         ax.set_title(
-            "Algoritmos de Ordenamiento - Ordenados por Complejidad Teórica\n"
-            "O(n)→ más rápido | O(n²)→ más lento",
+            "Algoritmos de Ordenamiento - Ordenados por Complejidad Teórica",
             fontsize=12,
         )
         ax.set_xlim(0, max(times) * 1.25)
@@ -157,4 +155,4 @@ class SortingVisualizer:
         plt.savefig(output_path, dpi=150, bbox_inches="tight")
         plt.close()
 
-        print(f"Gráfico de complejidad guardado en {output_path}")
+        print(f"Gráfico guardado en {output_path}")

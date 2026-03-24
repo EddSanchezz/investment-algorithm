@@ -5,10 +5,12 @@ Coordina la ejecución del pipeline ETL y análisis de ordenamiento.
 
 import os
 import sys
+import random
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.etl.fetcher import FinancialDataFetcher
+from src.etl.scraper import InvestingScraper
 from src.etl.cleaner import DataCleaner
 from src.etl.unifier import DataUnifier
 from src.sorting.comparator import SortingComparator
@@ -31,25 +33,32 @@ class InvestmentPipeline:
     Complejidad total del pipeline: Dominada por ETL O(n*d) y ordenamiento O(a*n*log*n)
     """
 
-    COLOMBIAN_STOCKS = ["ISA", "GEB"]
+    COLOMBIAN_STOCKS = ["ecopetrol", "isa", "geb", "nutresa"]
 
     INTERNATIONAL_ETFS = [
-        "VOO",
-        "VTI",
-        "QQQ",
-        "SPY",
-        "VEA",
-        "VWO",
-        "BND",
-        "EFA",
-        "EEM",
-        "TLT",
+        "voo",
+        "vti",
+        "qqq",
+        "spy",
+        "vea",
+        "vwo",
+        "bnd",
+        "efa",
+        "eem",
+        "tlt",
+        "ivv",
+        "schd",
+        "dia",
+        "iwm",
+        "xlf",
+        "xlk",
     ]
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", use_scraper: bool = True):
         self.data_dir = data_dir
         self.raw_dir = os.path.join(data_dir, "raw")
         self.processed_dir = os.path.join(data_dir, "processed")
+        self.use_scraper = use_scraper
 
         os.makedirs(self.raw_dir, exist_ok=True)
         os.makedirs(self.processed_dir, exist_ok=True)
@@ -60,8 +69,11 @@ class InvestmentPipeline:
         self.comparator = SortingComparator()
         self.visualizer = SortingVisualizer()
         self.volume_analyzer = VolumeAnalyzer()
+        self.scraper = None
 
-    def run_etl(self, symbols: list = None, years: int = 5) -> list:
+    def run_etl(
+        self, symbols: list = None, years: int = 5, sample_mode: bool = False
+    ) -> list:
         """
         Ejecuta el proceso ETL completo.
 
@@ -75,14 +87,29 @@ class InvestmentPipeline:
         Complejidad: O(n*d) para descarga + O(n) para limpieza + O(n log n) para unificación
         """
         if symbols is None:
-            symbols = self.COLOMBIAN_STOCKS[:10] + self.INTERNATIONAL_ETFS[:10]
+            symbols = self.COLOMBIAN_STOCKS + self.INTERNATIONAL_ETFS
 
         print(f"\n{'=' * 60}")
         print("ETAPA 1: Extracción de datos")
         print(f"{'=' * 60}")
 
         raw_file = os.path.join(self.raw_dir, "raw_data.csv")
-        all_records = self.fetcher.fetch_multiple_assets(symbols, years)
+
+        if sample_mode:
+            print("Generando datos de ejemplo...")
+            all_records = self._generate_sample_data(symbols)
+        elif self.use_scraper:
+            try:
+                print("Usando web scraping (Investing.com con Selenium)...")
+                with InvestingScraper(headless=True) as scraper:
+                    all_records = scraper.fetch_multiple_assets(symbols, years)
+            except Exception as e:
+                print(f"Error con scraper: {e}")
+                print("Usando fetcher alternativo...")
+                all_records = self.fetcher.fetch_multiple_assets(symbols, years)
+        else:
+            print("Usando fetcher (Yahoo Finance)...")
+            all_records = self.fetcher.fetch_multiple_assets(symbols, years)
 
         if not all_records:
             print("No se pudieron obtener datos. Usando datos de ejemplo...")
@@ -146,9 +173,6 @@ class InvestmentPipeline:
         print("\nTabla de resultados (orden ascendente por tiempo):")
         print(table)
 
-        self.visualizer.plot_sorting_times(
-            results, os.path.join(output_dir, "sorting_times.png")
-        )
         self.visualizer.plot_complexity_comparison(
             results, os.path.join(output_dir, "complexity_comparison.png")
         )
@@ -223,14 +247,13 @@ class InvestmentPipeline:
             Lista de registros de ejemplo
         """
         from datetime import datetime, timedelta
-        import random
 
         records = []
-        base_date = datetime(2021, 1, 1)
+        base_date = datetime(2025, 1, 1)
 
         for symbol in symbols:
             price = random.uniform(10, 100)
-            for day in range(365 * 5):
+            for day in range(250):
                 date = base_date + timedelta(days=day)
                 if date.weekday() < 5:
                     change = random.uniform(-0.05, 0.05)
@@ -281,7 +304,7 @@ def main():
     if args.symbols:
         records = pipeline.run_etl(symbols=args.symbols, years=args.years)
     elif args.sample:
-        records = pipeline.run_etl()
+        records = pipeline.run_etl(sample_mode=True)
     else:
         records = pipeline.run_etl()
 
