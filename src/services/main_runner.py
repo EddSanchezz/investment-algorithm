@@ -1,6 +1,5 @@
 """
-Main Runner - Orquestador principal del proyecto.
-Coordina la ejecución del pipeline ETL y análisis de ordenamiento.
+Main Runner - Orquestador del pipeline ETL y análisis de ordenamiento.
 """
 
 import os
@@ -19,21 +18,7 @@ from src.services.volume_analyzer import VolumeAnalyzer
 
 
 class InvestmentPipeline:
-    """
-    Pipeline principal que orquesta todas las etapas del proyecto.
-
-    Etapas:
-    1. Extracción de datos (HTTP directo)
-    2. Limpieza y transformación
-    3. Unificación de datasets
-    4. Análisis de ordenamiento
-    5. Análisis de volumen
-    6. Generación de visualizaciones
-
-    Complejidad total del pipeline: Dominada por ETL O(n*d) y ordenamiento O(a*n*log*n)
-    """
-
-    COLOMBIAN_STOCKS = ["ecopetrol", "isa", "geb", "nutresa"]
+    COLOMBIAN_STOCKS = ["ecopetrol.cl", "isa.cl", "geb.cl", "nutresa.cl"]
 
     INTERNATIONAL_ETFS = [
         "voo",
