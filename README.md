@@ -1,18 +1,24 @@
 # Investment Algorithm - Seguimiento 1
 
+## Requisitos
+
+- **Python**: 3.10 o superior
+- **Taskfile**: 3.0 o superior
+- **SO**: Windows, Linux, macOS
+
 ## Descripción
 
 Este proyecto es parte del curso de Análisis de Algoritmos de la Universidad del Quindío. El objetivo es analizar el rendimiento de 12 algoritmos de ordenamiento utilizando datos financieros reales (acciones y ETFs), comparando la complejidad teórica Big-O con el tiempo real de ejecución.
 
 ## ¿Qué hace el proyecto?
 
-1. **Descarga datos financieros** mediante web scraping de Investing.com (Selenium)
+1. **Descarga datos financieros** mediante HTTP directo de Yahoo Finance API
 2. **Limpia los datos** (elimina duplicados, interpola valores faltantes, detecta outliers)
 3. **Ordena los registros** por fecha y precio de cierre usando 12 algoritmos diferentes
 4. **Analiza el volumen** de negociación para identificar los 15 días con mayor actividad
 5. **Genera gráficos** comparativos de rendimiento
 
-## Activos Financieros Utilizados
+## Activos Financieros
 
 ### Acciones Colombianas (4)
 | Símbolo | Nombre |
