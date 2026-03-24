@@ -25,14 +25,51 @@ class FinancialDataFetcher:
 
     BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     MAX_RETRIES = 3
     RETRY_DELAY = 2
 
+    COLOMBIAN_SUFFIX = ".CL"
+    US_ETFS = [
+        "VOO",
+        "VTI",
+        "QQQ",
+        "SPY",
+        "VEA",
+        "VWO",
+        "BND",
+        "EFA",
+        "EEM",
+        "TLT",
+        "IVV",
+        "SCHD",
+        "DIA",
+        "IWM",
+        "XLF",
+        "XLK",
+    ]
+
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update(self.HEADERS)
+
+    def _normalize_symbol(self, symbol: str) -> str:
+        """
+        Normaliza el símbolo según el mercado.
+        Las acciones colombianas necesitan el sufijo .CO
+        Los ETFs estadounidenses no necesitan sufijo.
+        """
+        symbol = symbol.upper().strip()
+
+        if symbol in self.US_ETFS:
+            return symbol
+
+        colombian_stocks = ["ECOPETROL", "ISA", "GEB", "NUTRESA"]
+        if symbol in colombian_stocks:
+            return symbol + self.COLOMBIAN_SUFFIX
+
+        return symbol
 
     def fetch_historical_data(
         self, symbol: str, start_date: datetime, end_date: datetime
@@ -50,7 +87,8 @@ class FinancialDataFetcher:
 
         Complejidad: O(d) donde d es el número de días en el período
         """
-        url = self.BASE_URL.format(symbol=symbol)
+        normalized_symbol = self._normalize_symbol(symbol)
+        url = self.BASE_URL.format(symbol=normalized_symbol)
         params = {
             "period1": int(start_date.timestamp()),
             "period2": int(end_date.timestamp()),

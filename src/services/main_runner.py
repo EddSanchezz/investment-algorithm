@@ -54,7 +54,7 @@ class InvestmentPipeline:
         "xlk",
     ]
 
-    def __init__(self, data_dir: str = "data", use_scraper: bool = True):
+    def __init__(self, data_dir: str = "data", use_scraper: bool = False):
         self.data_dir = data_dir
         self.raw_dir = os.path.join(data_dir, "raw")
         self.processed_dir = os.path.join(data_dir, "processed")
@@ -177,7 +177,21 @@ class InvestmentPipeline:
             results, os.path.join(output_dir, "complexity_comparison.png")
         )
 
+        sorting_csv = os.path.join(output_dir, "sorting_results.csv")
+        self._save_sorting_csv(results, sorting_csv)
+
         return results
+
+    def _save_sorting_csv(self, results: list, filepath: str) -> None:
+        """Guarda los resultados de ordenamiento en CSV."""
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            f.write("Metodo de ordenamiento,Complejidad O(),Tamano,Tiempo (s)\n")
+            for r in results:
+                f.write(
+                    f"{r['algorithm']},{r['complexity']},{r['size']},{r['average_time']:.6f}\n"
+                )
+        print(f"Resultados de ordenamiento guardados en {filepath}")
 
     def run_volume_analysis(
         self, records: list, top_n: int = 15, output_dir: str = "data/processed"
@@ -207,7 +221,19 @@ class InvestmentPipeline:
         for day in top_days:
             print(f"{day['date']:<15} {day['total_volume']:>20,}")
 
+        volume_csv = os.path.join(output_dir, "top_volume_days.csv")
+        self._save_volume_csv(top_days, volume_csv)
+
         return top_days
+
+    def _save_volume_csv(self, top_days: list, filepath: str) -> None:
+        """Guarda los días con mayor volumen en CSV."""
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            f.write("Fecha,Volumen Total\n")
+            for day in top_days:
+                f.write(f"{day['date']},{day['total_volume']}\n")
+        print(f"Resultados de volumen guardados en {filepath}")
 
     def run_full_pipeline(self) -> dict:
         """

@@ -1,6 +1,6 @@
 """
-Scraper Module - Web scraping de datos financieros desde Investing.com.
-Este módulo obtiene datos históricos de acciones y ETFs mediante Selenium.
+Scraper Module - Fallback scraper para datos financieros.
+Utiliza Yahoo Finance API mediante requests directos como alternativa.
 """
 
 import time
@@ -8,32 +8,39 @@ import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-
-from selenium.common.exceptions import (
-    TimeoutException,
-    NoSuchElementException,
-    StaleElementReferenceException,
-)
+import requests
 
 
 class InvestingScraper:
     """
-    Scraper para obtener datos financieros desde Investing.com.
+    Scraper para obtener datos financieros (usa Yahoo Finance API).
 
-    Utiliza Selenium para navegar y extraer datos históricos de precios.
-    Incluye manejo de ratelimit y detection avoidance.
+    Dado que Investing.com bloquea solicitudes directas, este módulo
+    utiliza la API de Yahoo Finance mediante requests HTTP directos,
+    que cumple con los requisitos del documento de seguimiento.
 
     Complejidad de extracción por activo: O(d) donde d = días solicitados
     """
 
-    BASE_URL = "https://www.investing.com/equities/{symbol}-historical-data"
+    COLOMBIAN_SUFFIX = ".CL"
+    US_ETFS = [
+        "VOO",
+        "VTI",
+        "QQQ",
+        "SPY",
+        "VEA",
+        "VWO",
+        "BND",
+        "EFA",
+        "EEM",
+        "TLT",
+        "IVV",
+        "SCHD",
+        "DIA",
+        "IWM",
+        "XLF",
+        "XLK",
+    ]
 
     COLOMBIAN_STOCKS = {
         "ecopetrol": "Ecopetrol S.A.",
@@ -62,191 +69,93 @@ class InvestingScraper:
     }
 
     def __init__(self, headless: bool = True):
-        self.headless = headless
-        self.driver: Optional[webdriver.Chrome] = None
-        self.wait_time = random.uniform(2, 4)
-
-    def _init_driver(self) -> webdriver.Chrome:
-        """
-        Inicializa el driver de Chrome con opciones anti-detección.
-        """
-        chrome_options = Options()
-
-        if self.headless:
-            chrome_options.add_argument("--headless=new")
-
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option("useAutomationExtension", False)
-
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        driver.execute_cdp_cmd(
-            "Page.addScriptToEvaluateOnNewDocument",
+        self.session = requests.Session()
+        self.session.headers.update(
             {
-                "source": """
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                })
-            """
-            },
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
         )
+        self.wait_time = random.uniform(0.5, 1.5)
 
-        return driver
+    def _normalize_symbol(self, symbol: str) -> str:
+        """Normaliza el símbolo según el mercado."""
+        symbol = symbol.upper().strip()
 
-    def _safe_get(self, url: str, max_retries: int = 3) -> bool:
-        """
-        Navega a una URL de forma segura con reintentos.
-        """
-        for attempt in range(max_retries):
-            try:
-                self.driver.get(url)
-                time.sleep(self.wait_time)
-                return True
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    time.sleep(random.uniform(5, 10))
-                else:
-                    print(f"Error navigating to {url}: {e}")
-                    return False
-        return False
+        if symbol in self.US_ETFS:
+            return symbol
 
-    def _wait_for_table(self, timeout: int = 10) -> bool:
-        """
-        Espera a que la tabla de datos históricos cargue.
-        """
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "historical-data-table"))
-            )
-            return True
-        except TimeoutException:
-            return False
+        if symbol in ["ECOPETROL", "ISA", "GEB", "NUTRESA"]:
+            return symbol + self.COLOMBIAN_SUFFIX
 
-    def _parse_date(self, date_str: str) -> str:
-        """
-        Convierte formato de fecha de Investing.com a YYYY-MM-DD.
-        """
-        try:
-            dt = datetime.strptime(date_str.strip(), "%b %d, %Y")
-            return dt.strftime("%Y-%m-%d")
-        except ValueError:
-            try:
-                dt = datetime.strptime(date_str.strip(), "%d/%m/%Y")
-                return dt.strftime("%Y-%m-%d")
-            except ValueError:
-                return date_str
-
-    def _extract_number(self, value_str: str) -> Optional[float]:
-        """
-        Convierte string de precio a número.
-        """
-        if not value_str or value_str == "-":
-            return None
-
-        cleaned = value_str.replace(",", "").replace(".", "").strip()
-
-        try:
-            return float(cleaned)
-        except ValueError:
-            return None
+        return symbol
 
     def fetch_historical_data(
         self, symbol: str, start_date: datetime, end_date: datetime = None
     ) -> List[Dict]:
         """
-        Descarga datos históricos para un símbolo desde Investing.com.
+        Descarga datos históricos para un símbolo.
 
         Parámetros:
-            symbol: Símbolo del activo (ej: 'ecopetrol', 'voo')
-            start_date: Fecha inicial del período
-            end_date: Fecha final (default: datetime.now())
+            symbol: Símbolo del activo
+            start_date: Fecha inicial
+            end_date: Fecha final
 
         Retorna:
             Lista de diccionarios con OHLCV
-
-        Complejidad: O(d) donde d = número de días
         """
         if end_date is None:
             end_date = datetime.now()
 
-        if self.driver is None:
-            self.driver = self._init_driver()
+        normalized_symbol = self._normalize_symbol(symbol)
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{normalized_symbol}"
 
-        url = f"https://www.investing.com/equities/{symbol.lower()}-historical-data"
-
-        if not self._safe_get(url):
-            return []
-
-        if not self._wait_for_table():
-            print(f"Tabla no encontrada para {symbol}")
-            return []
-
-        records = []
+        params = {
+            "period1": int(start_date.timestamp()),
+            "period2": int(end_date.timestamp()),
+            "interval": "1d",
+            "events": "history",
+        }
 
         try:
-            table = self.driver.find_element(By.CLASS_NAME, "historical-data-table")
-            tbody = table.find_element(By.TAG_NAME, "tbody")
-            rows = tbody.find_elements(By.TAG_NAME, "tr")
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
 
-            for row in rows:
-                try:
-                    cols = row.find_elements(By.TAG_NAME, "td")
+            result = data.get("chart", {}).get("result", [])
+            if not result:
+                return []
 
-                    if len(cols) >= 6:
-                        date_str = cols[0].text.strip()
-                        date = self._parse_date(date_str)
+            result_data = result[0]
+            if "timestamp" not in result_data:
+                return []
 
-                        if (
-                            start_date
-                            <= datetime.strptime(date, "%Y-%m-%d")
-                            <= end_date
-                        ):
-                            record = {
-                                "date": date,
-                                "symbol": symbol.upper(),
-                                "open": self._extract_number(cols[1].text),
-                                "high": self._extract_number(cols[2].text),
-                                "low": self._extract_number(cols[3].text),
-                                "close": self._extract_number(cols[4].text),
-                                "volume": self._extract_number(
-                                    cols[5]
-                                    .text.replace("M", "000000")
-                                    .replace("K", "000")
-                                ),
-                            }
+            timestamps = result_data["timestamp"]
+            quote = result_data.get("indicators", {}).get("quote", [{}])[0]
 
-                            if record["close"] is not None:
-                                records.append(record)
-
-                except (StaleElementReferenceException, NoSuchElementException):
+            records = []
+            for i, ts in enumerate(timestamps):
+                if quote["open"][i] is None:
                     continue
+                record = {
+                    "date": datetime.fromtimestamp(ts).strftime("%Y-%m-%d"),
+                    "symbol": symbol.upper(),
+                    "open": quote["open"][i],
+                    "high": quote["high"][i],
+                    "low": quote["low"][i],
+                    "close": quote["close"][i],
+                    "volume": quote["volume"][i],
+                }
+                records.append(record)
 
-        except NoSuchElementException:
-            print(f"Tabla no encontrada para {symbol}")
+            return records
 
-        time.sleep(random.uniform(1, 2))
-
-        return records
+        except Exception as e:
+            print(f"Error fetching {symbol}: {e}")
+            return []
 
     def fetch_multiple_assets(self, symbols: List[str], years: int = 5) -> List[Dict]:
         """
         Descarga datos para múltiples activos.
-
-        Parámetros:
-            symbols: Lista de símbolos a descargar
-            years: Número de años de historial
-
-        Retorna:
-            Lista combinada de todos los registros
-
-        Complejidad: O(n * d) donde n = número de activos
         """
         end_date = datetime.now()
         start_date = end_date - timedelta(days=365 * years)
@@ -266,18 +175,14 @@ class InvestingScraper:
                 print("  -> Sin datos disponibles")
 
             if idx < total:
-                delay = random.uniform(3, 6)
+                delay = random.uniform(1, 2)
                 time.sleep(delay)
 
         return all_records
 
     def close(self):
-        """
-        Cierra el driver del navegador.
-        """
-        if self.driver:
-            self.driver.quit()
-            self.driver = None
+        """Cierra la sesión."""
+        self.session.close()
 
     def __enter__(self):
         return self
