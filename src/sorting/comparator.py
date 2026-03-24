@@ -51,22 +51,18 @@ class SortingComparator:
 
     def prepare_data(self, records: List[Dict], sort_key: str = "date") -> List[Dict]:
         """
-        Prepara los datos para ordenamiento agregando clave de ordenamiento.
+        Prepara los datos para ordenamiento creando una clave de ordenamiento.
 
-        Parámetros:
-            records: Lista de registros financieros
-            sort_key: Campo por el cual ordenar
-
-        Retorna:
-            Lista de diccionarios con campo 'sort_key' adicional
-
-        Complejidad: O(n) para recorrer y copiar registros
+        Para fecha: ordena por fecha (año, mes, día)
+        Para otros campos: usa el valor directamente
         """
         if sort_key == "date":
 
             def parse_key(r):
                 parts = r["date"].split("-")
-                return (int(parts[0]), int(parts[1]), int(parts[2]))
+                fecha = (int(parts[0]), int(parts[1]), int(parts[2]))
+                cierre = r.get("close", 0) or 0
+                return (fecha, cierre)
 
             return [{"sort_key": parse_key(r), **r} for r in records]
         else:
