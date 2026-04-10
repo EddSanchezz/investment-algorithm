@@ -143,6 +143,16 @@ python -m src.services.main_runner
 | `task lint` | Verifica código con linter |
 | `task api` | Inicia servidor REST en localhost:5000 |
 
+## Problemas Comunes
+
+| Problema | Solución |
+|----------|----------|
+| Error 404 al descargar | Verificar símbolo correcto. Las acciones colombianas necesitan sufijo `.CL` (ej: `ECOPETROL.CL`) |
+| Timeout de conexión | Verificar conexión a internet. Aumentar timeout en `src/etl/fetcher.py` si es necesario |
+| Sin datos disponibles | La API de Yahoo Finance puede tener limitaciones. Verificar símbolo en yahoo.com |
+| Error de permisos | Asegurarse de tener permisos de escritura en la carpeta `data/` |
+| Warning de outliers | Es normal en datos financieros. Los outliers se detectan pero no se eliminan automáticamente |
+
 ## Salida Generada
 
 - `data/raw/raw_data.csv` - Datos crudos

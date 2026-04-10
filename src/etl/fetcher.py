@@ -42,15 +42,22 @@ class FinancialDataFetcher:
 
                 result = data.get("chart", {}).get("result", [])
                 if not result:
+                    print(f"  -> Advertencia: No hay datos disponibles para {symbol}")
                     return []
 
                 result_data = result[0]
 
-                if "timestamp" not in result_data:
+                if "timestamp" not in result_data or not result_data["timestamp"]:
+                    print(f"  -> Advertencia: Sin fechas disponibles para {symbol}")
                     return []
 
                 timestamps = result_data["timestamp"]
                 quote = result_data.get("indicators", {}).get("quote", [{}])[0]
+
+                # Validar que quote tenga datos
+                if not quote.get("close"):
+                    print(f"  -> Advertencia: Sin precios de cierre para {symbol}")
+                    return []
 
                 for i, ts in enumerate(timestamps):
                     if quote["open"][i] is None:

@@ -160,9 +160,20 @@ El proyecto maneja las diferencias entre mercados de la siguiente manera:
 
 2. **Desalineaciones temporales**: Al unificar los datos, se ordenan por fecha usando el criterio de ordenamiento establecido (fecha + precio de cierre). Los días sin negociación para un activo no generan registros, pero otros activos pueden tener datos ese día.
 
-3. **Díasfestivos**: No se agregan días festivos manualmente; el sistema simplemente toma los datos disponibles de cada fuente. La API de Yahoo Finance ya filtra los días sin negociación.
+   **Ejemplo concreto:**
+   - El 15 de marzo de 2025 es festivo en Colombia (San José) pero no en EE.UU.
+   - Al descargar datos, ECOPETROL no tendrá registro para esa fecha, pero VOO sí lo tendrá
+   - Al unificar, el dataset simplemente tendrá un registro menos para ECOPETROL ese día
+   - Al ordenar por fecha, el algoritmo maneja correctamente los "huecos" porque no intenta forzar un registro donde no existe
 
-**Nota de mejora para versión futura**: Se podría implementar un mapeo explícito de días festivos por mercado (Colombia vs EE.UU.) para detectar y documentar explícitamente los huecos.
+3. **Díasfestivos**: No se agregan días festivos manualmente; el sistema simplemente toma los datos disponibles de cada fuente. La API de Yahoo Finance ya filtra los días sin negociación (fines de semana y festivos locales).
+
+4. **Complejidad del manejo**: La unificación tiene complejidad O(n log n) dominada por el ordenamiento final. El sistema no requiere algoritmos adicionales para detectar o llenar huecos porque los algoritmos de ordenamiento funcionan correctamente con series de diferente longitud.
+
+**Nota de mejora para versión futura**: Se podría implementar un mapeo explícito de días festivos por mercado (Colombia vs EE.UU.) para:
+- Detectar y documentar explícitamente los huecos
+- Estandarizar la cantidad de datos por activo
+- Calcular métricas de disponibilidad por activo
 
 ## 4. Requerimiento 2: Análisis de Algoritmos de Ordenamiento
 
