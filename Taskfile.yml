@@ -7,8 +7,8 @@ tasks:
   install:
     desc: Crea entorno virtual e instala dependencias
     cmds:
-      - python -m venv {{.VENV_DIR}}
-      - .venv/Scripts/pip install -r requirements.txt
+      - py -m venv {{.VENV_DIR}}
+      - .venv/Scripts/python -m pip install -r requirements.txt
 
   run:
     desc: Ejecuta el pipeline principal (usa datos cacheados)
