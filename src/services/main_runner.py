@@ -53,7 +53,6 @@ class InvestmentPipeline:
         self.comparator = SortingComparator()
         self.visualizer = SortingVisualizer()
         self.volume_analyzer = VolumeAnalyzer()
-        self.scraper = None
 
     def run_etl(self, symbols: list = None, years: int = 5) -> list:
         """
@@ -100,7 +99,8 @@ class InvestmentPipeline:
         print("Reporte de limpieza:")
         print(f"  - Valores faltantes detectados: {report['missing_values']}")
         print(f"  - Duplicados eliminados: {report['duplicates']}")
-        print(f"  - Outliers detectados: {report['outliers']}")
+        print(f"  - Outliers Z-Score detectados: {report['outliers_zscore']}")
+        print(f"  - Outliers IQR detectados: {report['outliers_iqr']}")
         print(f"  - Interpolaciones realizadas: {report['interpolations']}")
         print(f"  - Registros eliminados: {report['deletions']}")
 
@@ -108,10 +108,22 @@ class InvestmentPipeline:
         print("ETAPA 3: Unificación de datos")
         print(f"{'=' * 60}")
 
-        unified_file = os.path.join(self.processed_dir, "unified_data.csv")
-        self.unifier.save_to_csv(cleaned_records, unified_file)
+        gaps = self.unifier.detect_calendar_gaps(cleaned_records)
+        total_gaps = sum(len(v) for v in gaps.values())
+        if total_gaps > 0:
+            print(f"\nDesalineaciones de calendario detectadas: {total_gaps} días faltantes")
+            for sym, missing in gaps.items():
+                print(f"  - {sym}: {len(missing)} días faltantes")
+            print("Alineando calendarios bursátiles...")
+            aligned_records = self.unifier.align_calendars(cleaned_records)
+            print(f"Registros después de alineación: {len(aligned_records)}")
+        else:
+            aligned_records = cleaned_records
 
-        stats = self.unifier.generate_statistics(cleaned_records)
+        unified_file = os.path.join(self.processed_dir, "unified_data.csv")
+        self.unifier.save_to_csv(aligned_records, unified_file)
+
+        stats = self.unifier.generate_statistics(aligned_records)
         print("\nEstadísticas del dataset unificado:")
         print(f"  - Total de registros: {stats['total_records']}")
         print(f"  - Símbolos únicos: {stats['unique_symbols']}")
@@ -119,7 +131,7 @@ class InvestmentPipeline:
             f"  - Rango de fechas: {stats['date_range'][0]} a {stats['date_range'][1]}"
         )
 
-        return cleaned_records
+        return aligned_records
 
     def run_sorting_analysis(
         self, records: list, sort_key: str = "date", output_dir: str = "data/processed"
@@ -254,15 +266,31 @@ def main():
         default=5,
         help="Años de historial a descargar (default: 5)",
     )
+    parser.add_argument(
+        "--force-download",
+        action="store_true",
+        help="Forzar descarga aunque existan datos previos (garantiza reproducibilidad)",
+    )
+    parser.add_argument(
+        "--use-scraper",
+        action="store_true",
+        help="Usar web scraping en vez de API de Yahoo Finance",
+    )
 
     args = parser.parse_args()
 
-    pipeline = InvestmentPipeline()
+    pipeline = InvestmentPipeline(use_scraper=args.use_scraper)
 
-    if args.symbols:
-        records = pipeline.run_etl(symbols=args.symbols, years=args.years)
+    unified_file = os.path.join(pipeline.processed_dir, "unified_data.csv")
+    if args.force_download or not os.path.exists(unified_file):
+        if args.symbols:
+            records = pipeline.run_etl(symbols=args.symbols, years=args.years)
+        else:
+            records = pipeline.run_etl()
     else:
-        records = pipeline.run_etl()
+        print(f"\nUsando datos existentes en {unified_file}")
+        print("(usa --force-download para regenerar desde cero)")
+        records = pipeline.unifier.load_from_csv(unified_file)
 
     pipeline.run_sorting_analysis(records)
     pipeline.run_volume_analysis(records)

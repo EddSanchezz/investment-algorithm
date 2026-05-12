@@ -1,4 +1,7 @@
-# Investment Algorithm - Seguimiento 1
+# Investment Algorithm — Análisis Algorítmico Financiero
+
+**Universidad del Quindío** — Programa de Ingeniería de Sistemas y Computación
+**Curso**: Análisis de Algoritmos — 2026-1
 
 ## Requisitos
 
@@ -8,53 +11,46 @@
 
 ## Descripción
 
-Este proyecto es parte del curso de Análisis de Algoritmos de la Universidad del Quindío. El objetivo es analizar el rendimiento de 12 algoritmos de ordenamiento utilizando datos financieros reales (acciones y ETFs), comparando la complejidad teórica Big-O con el tiempo real de ejecución.
+Sistema de análisis algorítmico de activos financieros que implementa:
+1. **ETL**: Extracción HTTP directa de Yahoo Finance (20 activos, 5+ años)
+2. **Similitud**: 4 algoritmos (Euclidiana, Pearson, DTW, Coseno)
+3. **Patrones**: Ventana deslizante (días al alza, Gap Up)
+4. **Volatilidad**: Clasificación de riesgo (Conservador/Moderado/Agresivo)
+5. **Dashboard**: Heatmap de correlación, candlestick con SMA, reporte PDF
+6. **API REST**: Flask con frontend Chart.js
 
-## Documentación del Proyecto
+## Documentación
 
-El proyecto cuenta con documentación formal en:
-- **Documento de diseño**: `docs/Diseno.md` (este archivo)
-- **Informe principal**: `Seguimiento 1 - Análisis de algoritmos`
+- **Documento de diseño**: `docs/Diseno.md`
+- **Plan de desarrollo**: `Plan.md`
+- **Enunciado del proyecto**: `Proyecto.md`
 
-## ¿Qué hace el proyecto?
-
-1. **Descarga datos financieros** mediante HTTP directo de Yahoo Finance API
-   - Peticiones explícitas sin librerías de alto nivel
-   - Reintentos con backoff exponencial
-   - Parsing manual de respuestas JSON
-2. **Limpia los datos** (elimina duplicados, interpola valores faltantes, detecta outliers)
-   - Duplicados: HashSet O(n)
-   - Outliers: Rango Intercuartil (IQR) O(n)
-   - Interpolación: Lineal O(n)
-3. **Ordena los registros** por fecha y precio de cierre usando 12 algoritmos diferentes
-4. **Analiza el volumen** de negociación para identificar los 15 días con mayor actividad
-5. **Genera gráficos** comparativos de rendimiento
-
-## Arquitectura del Sistema
+## Arquitectura
 
 ```
 src/
+├── api/
+│   ├── gateway.py              # App Flask + Blueprints
+│   ├── routes/
+│   │   ├── similarity.py       # Similitud entre activos
+│   │   ├── patterns.py         # Patrones y volatilidad
+│   │   ├── dashboard.py        # Candlestick y SMA
+│   │   └── reports.py          # Generación de PDF
+│   └── templates/pages/        # Frontend (Jinja2 + Chart.js)
 ├── etl/
-│   ├── fetcher.py        # Extracción HTTP directo (peticiones explícitas)
-│   ├── scraper.py        # Scraper alternativo
-│   ├── cleaner.py        # Limpieza con justificación algorítmica
-│   └── unifier.py        # Unificación y conciliación de datos
-├── sorting/
-│   ├── algorithms.py     # 12 algoritmos de ordenamiento
-│   ├── comparator.py     # Comparador de rendimiento
-│   └── visualizer.py     # Generación de gráficos
-└── services/
-    ├── volume_analyzer.py # Análisis de volumen
-    └── main_runner.py    # Orquestador principal
+│   ├── fetcher.py              # HTTP directo a Yahoo Finance
+│   ├── cleaner.py              # Limpieza (duplicados, outliers, interpolación)
+│   └── unifier.py              # Unificación + alineación calendarios
+├── services/
+│   ├── similarity/             # 4 algoritmos de similitud
+│   ├── patterns/               # Ventana deslizante + volatilidad
+│   └── reporting/              # PDF + indicadores técnicos
+├── sorting/                    # 12 algoritmos de ordenamiento
+├── static/                     # CSS + JS
+└── tests/                      # 47 tests unitarios
 ```
 
-### Proceso ETL
-
-1. **Extracción**: Peticiones HTTP directas a Yahoo Finance API
-2. **Transformación**: Limpieza (duplicados, outliers, valores faltantes)
-3. **Carga**: Unificación en dataset único
-
-## Activos Financieros
+## Activos Financieros (20)
 
 ### Acciones Colombianas (4)
 | Símbolo | Nombre |
@@ -65,110 +61,80 @@ src/
 | NUTRESA | Nutresa S.A. |
 
 ### ETFs Internacionales (16)
-| Símbolo | Nombre |
-|---------|--------|
-| VOO | Vanguard S&P 500 ETF |
-| VTI | Vanguard Total Stock Market |
-| QQQ | Invesco QQQ Trust (Nasdaq-100) |
-| SPY | SPDR S&P 500 ETF |
-| VEA | Vanguard FTSE Developed Markets |
-| VWO | Vanguard FTSE Emerging Markets |
-| BND | Vanguard Total Bond Market |
-| EFA | iShares MSCI EAFE |
-| EEM | iShares MSCI Emerging Markets |
-| TLT | iShares 20+ Year Treasury Bond |
-| IVV | iShares Core S&P 500 ETF |
-| SCHD | Schwab U.S. Dividend Equity ETF |
-| DIA | SPDR Dow Jones Industrial Average |
-| IWM | iShares Russell 2000 ETF |
-| XLF | Financial Select Sector SPDR |
-| XLK | Technology Select Sector SPDR |
-
-**Total: 20 activos**
-
-## Documentación del Código
-
-El código está documentado con:
-
-- **Docstrings** en todas las clases y funciones principales
-- **Comentarios** explicando decisiones técnicas
-- **Complejidad algorítmica** documentada en cada función
-
-### Ejemplo de documentación en cleaner.py:
-
-```python
-def detect_duplicates(self, records: List[Dict]) -> List[int]:
-    """
-    Detecta registros duplicados basándose en fecha y símbolo.
-    Complejidad: O(n) usando tabla hash para deduplicación
-    """
-```
-
-### Ejemplo en fetcher.py:
-
-```python
-def fetch_historical_data(self, symbol: str, start_date: datetime, end_date: datetime):
-    """
-    Descarga datos históricos mediante HTTP directo.
-    Konstruye la URL con parámetros period1, period2, interval.
-    Parsing manual del JSON de respuesta.
-    Reintentos automáticos con backoff.
-    """
-```
+VOO, VTI, QQQ, SPY, VEA, VWO, BND, EFA, EEM, TLT, IVV, SCHD, DIA, IWM, XLF, XLK
 
 ## Ejecución
 
 ### Primera vez
 ```bash
-task install   # Crea entorno virtual e instala dependencias
-task run       # Ejecuta el pipeline completo
+task install   # Crea .venv e instala dependencias
+task run       # Pipeline ETL completo
 ```
 
-### Después de la primera vez
+### Servidor web
 ```bash
-task run       # Ya tiene el entorno instalado
+task api       # localhost:5000
 ```
 
-### Ejecutar sin Taskfile
+### Tests
 ```bash
-python -m pip install -r requirements.txt
+task test      # 47 tests unitarios
+```
+
+### Sin Taskfile
+```bash
+pip install -r requirements.txt
 python -m src.services.main_runner
+python -m src.api.gateway
 ```
 
-## Opciones Adicionales
+## Opciones
 
 | Comando | Descripción |
 |---------|-------------|
+| `task run` | Pipeline ETL completo |
+| `task api` | Servidor web en :5000 |
+| `task test` | Ejecuta tests |
+| `task lint` | Verifica código |
 | `task clean` | Limpia archivos generados |
-| `task lint` | Verifica código con linter |
-| `task api` | Inicia servidor REST en localhost:5000 |
 
-## Problemas Comunes
+## Endpoints API
 
-| Problema | Solución |
-|----------|----------|
-| Error 404 al descargar | Verificar símbolo correcto. Las acciones colombianas necesitan sufijo `.CL` (ej: `ECOPETROL.CL`) |
-| Timeout de conexión | Verificar conexión a internet. Aumentar timeout en `src/etl/fetcher.py` si es necesario |
-| Sin datos disponibles | La API de Yahoo Finance puede tener limitaciones. Verificar símbolo en yahoo.com |
-| Error de permisos | Asegurarse de tener permisos de escritura en la carpeta `data/` |
-| Warning de outliers | Es normal en datos financieros. Los outliers se detectan pero no se eliminan automáticamente |
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/health` | Estado del servidor |
+| GET | `/api/similarity?s1=VOO&s2=SPY` | 4 métricas de similitud |
+| GET | `/api/correlation-matrix` | Matriz de correlación |
+| GET | `/api/patterns?symbol=VOO&pattern=consecutive_up` | Patrones |
+| GET | `/api/volatility/ranking` | Ranking de riesgo |
+| GET | `/api/candlestick?symbol=VOO` | OHLC + SMA |
+| POST | `/api/report/generate` | Descargar PDF |
 
 ## Salida Generada
 
-- `data/raw/raw_data.csv` - Datos crudos
-- `data/processed/unified_data.csv` - Datos unificados
-- `data/processed/sorting_results.csv` - Tabla 1 (algoritmos, complejidad, tamaño, tiempo)
-- `data/processed/top_volume_days.csv` - 15 días con mayor volumen
-- `data/processed/complexity_comparison.png` - Gráfico comparativo
+- `data/raw/raw_data.csv` — Datos crudos
+- `data/processed/unified_data.csv` — Datos unificados
+- `data/processed/sorting_results.csv` — Benchmark de ordenamiento
+- `data/processed/top_volume_days.csv` — Días con mayor volumen
+- `data/processed/complexity_comparison.png` — Gráfico comparativo
+- `outputs/reporte_*.pdf` — Reportes PDF generados
+
+## Restricciones del Proyecto
+
+- ✅ Peticiones HTTP directas (sin yfinance/pandas_datareader)
+- ✅ Algoritmos implementados manualmente (sin scipy/sklearn)
+- ✅ Datos descargados automáticamente (sin datasets estáticos)
+- ✅ Reproducibilidad garantizada (--force-download)
+- ✅ Declaración de uso de IA documentada
 
 ## Utilización de la IA
 
 Este proyecto utilizó inteligencia artificial generativa como apoyo para:
-- Estructuración inicial del proyecto
-- Generación de código base
-- Resolución de problemas técnicos (ej: RecursionError en algoritmos)
+- Planificación estructurada del proyecto en fases
+- Generación de código base (algoritmos, rutas, frontend)
+- Tests unitarios y documentación
 
-El diseño algorítmico, análisis de complejidad y documentación fueron desarrollados manualmente.
+El diseño algorítmico, análisis de complejidad y decisiones arquitectónicas fueron desarrollados manualmente.
 
 ---
 

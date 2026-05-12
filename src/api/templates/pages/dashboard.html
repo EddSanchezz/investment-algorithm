@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard Completo</h1>
+<p class="subtitle">Matriz de correlación, gráfico de velas con medias móviles y exportación PDF.</p>
+
+<div class="grid-4" id="summaryCards"></div>
+
+<div class="card">
+    <h2>Matriz de Correlación</h2>
+    <p class="text-muted mb-4">Coeficiente de Pearson entre todos los pares de activos. Rojo = correlación negativa, Azul = positiva.</p>
+    <div style="overflow-x:auto;">
+        <table id="correlationTable" style="font-size:11px;"></table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="form-row">
+        <div class="form-group">
+            <label for="candleSymbol">Activo</label>
+            <select id="candleSymbol"></select>
+        </div>
+        <div class="form-group">
+            <label for="sma20">SMA-20</label>
+            <input type="checkbox" id="sma20" checked>
+        </div>
+        <div class="form-group">
+            <label for="sma50">SMA-50</label>
+            <input type="checkbox" id="sma50" checked>
+        </div>
+        <button class="btn" onclick="loadCandlestick()">Actualizar</button>
+        <button class="btn btn-secondary" onclick="downloadPDF()">📥 Exportar PDF</button>
+    </div>
+    <div class="chart-container">
+        <canvas id="candleChart"></canvas>
+    </div>
+</div>
+
+<div id="loading" style="display:none;" class="text-center text-muted mb-4">Cargando dashboard...</div>
+
+<script>
+let candleChart = null;
+
+async function loadDashboard() {
+    document.getElementById('loading').style.display = 'block';
+    try {
+        const res = await fetch('/api/dashboard/summary');
+        const data = await res.json();
+
+        const cards = document.getElementById('summaryCards');
+        cards.innerHTML = `
+            <div class="stat-card"><div class="value">${data.total_symbols}</div><div class="label">Activos</div></div>
+            <div class="stat-card"><div class="value">${(data.total_records || 0).toLocaleString()}</div><div class="label">Registros</div></div>
+            <div class="stat-card"><div class="value">${data.date_range ? data.date_range.start + ' — ' + data.date_range.end : '-'}</div><div class="label">Rango Fechas</div></div>
+            <div class="stat-card"><div class="value">${data.volatility_summary ? data.volatility_summary.average_volatility_pct + '%' : '-'}</div><div class="label">Vol. Promedio</div></div>
+        `;
+    } catch(e) {}
+    document.getElementById('loading').style.display = 'none';
+}
+
+async function loadCorrelationMatrix() {
+    try {
+        const res = await fetch('/api/correlation-matrix');
+        const data = await res.json();
+        const table = document.getElementById('correlationTable');
+        const syms = data.symbols;
+        const mat = data.matrix;
+
+        let html = '<tr><th style="min-width:60px;">Activo</th>';
+        syms.forEach(s => { html += `<th style="min-width:50px; font-size:10px;">${s}</th>`; });
+        html += '</tr>';
+
+        syms.forEach((sym, i) => {
+            html += `<tr><td><strong>${sym}</strong></td>`;
+            mat[i].forEach(val => {
+                const absVal = Math.abs(val);
+                let color;
+                if (val > 0) color = `rgba(37, 99, 235, ${absVal})`;
+                else if (val < 0) color = `rgba(220, 38, 38, ${absVal})`;
+                else color = '#f3f4f6';
+                const textColor = absVal > 0.6 ? 'white' : '#1a1a2e';
+                html += `<td style="background:${color}; color:${textColor}; text-align:center; font-weight:${absVal > 0.7 ? 'bold' : 'normal'};">${val.toFixed(2)}</td>`;
+            });
+            html += '</tr>';
+        });
+        table.innerHTML = html;
+    } catch(e) {}
+}
+
+async function loadCandleSymbols() {
+    try {
+        const res = await fetch('/api/similarity/symbols');
+        const data = await res.json();
+        const sel = document.getElementById('candleSymbol');
+        data.symbols.forEach(s => { sel.innerHTML += `<option value="${s}">${s}</option>`; });
+        if (data.symbols.length > 0) loadCandlestick();
+    } catch(e) {}
+}
+
+async function loadCandlestick() {
+    const symbol = document.getElementById('candleSymbol').value;
+    const showSMA20 = document.getElementById('sma20').checked;
+    const showSMA50 = document.getElementById('sma50').checked;
+
+    let smas = [];
+    if (showSMA20) smas.push(20);
+    if (showSMA50) smas.push(50);
+
+    try {
+        const res = await fetch(`/api/candlestick?symbol=${symbol}&smas=${smas.join(',')}&limit=252`);
+        const data = await res.json();
+
+        if (candleChart) candleChart.destroy();
+
+        const ctx = document.getElementById('candleChart');
+        const labels = data.dates;
+
+        const closes = data.ohlc.map(d => d.close);
+        const opens = data.ohlc.map(d => d.open);
+
+        const datasets = [
+            {
+                label: `${symbol} Close`,
+                data: closes,
+                borderColor: '#6c63ff',
+                backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+                yAxisID: 'y',
+            }
+        ];
+
+        const colors = { sma_20: '#22c55e', sma_50: '#f59e0b' };
+        Object.keys(data.smas || {}).forEach(key => {
+            const vals = data.smas[key];
+            if (showSMA20 && key === 'sma_20' || showSMA50 && key === 'sma_50') {
+                datasets.push({
+                    label: key.toUpperCase(),
+                    data: vals,
+                    borderColor: colors[key] || '#888',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.2,
+                    fill: false,
+                    yAxisID: 'y',
+                });
+            }
+        });
+
+        candleChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: `${symbol} — Precio de Cierre y Medias Móviles` },
+                },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } },
+                    y: { beginAtZero: false, ticks: { font: { size: 11 } } },
+                },
+            },
+        });
+    } catch(e) { showError('candleChart', 'Error al cargar candlestick'); }
+}
+
+async function downloadPDF(event) {
+    const symbol = document.getElementById('candleSymbol').value;
+    const btn = event.target;
+    btn.textContent = '⏳ Generando...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/report/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol }),
+        });
+        if (!res.ok) { alert('Error al generar PDF'); btn.textContent = '📥 Exportar PDF'; btn.disabled = false; return; }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte_${symbol}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch(e) { alert('Error al generar PDF'); }
+    btn.textContent = '📥 Exportar PDF';
+    btn.disabled = false;
+}
+
+loadDashboard();
+loadCorrelationMatrix();
+loadCandleSymbols();
+</script>
+{% endblock %}

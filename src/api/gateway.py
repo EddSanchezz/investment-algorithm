@@ -1,9 +1,10 @@
 """
-API Gateway - API REST simple para el proyecto.
-Proporciona endpoints para acceder a los resultados del análisis.
+API Gateway - API REST del proyecto.
+Proporciona endpoints para el análisis algorítmico financiero.
+Endpoints de similitud, patrones, volatilidad, dashboard y reportes.
 """
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 import os
 import sys
 
@@ -13,7 +14,8 @@ from src.etl.unifier import DataUnifier
 from src.sorting.comparator import SortingComparator
 from src.services.volume_analyzer import VolumeAnalyzer
 
-app = Flask(__name__)
+app = Flask(__name__,
+            static_folder=os.path.join(os.path.dirname(__file__), '..', 'static'))
 
 DATA_FILE = "data/processed/unified_data.csv"
 unifier = DataUnifier()
@@ -102,8 +104,49 @@ def get_statistics():
     return jsonify({"dataset": stats, "volume": volume_stats})
 
 
+from src.api.routes.similarity import similarity_bp
+from src.api.routes.patterns import patterns_bp
+from src.api.routes.dashboard import dashboard_bp
+from src.api.routes.reports import reports_bp
+app.register_blueprint(similarity_bp)
+app.register_blueprint(patterns_bp)
+app.register_blueprint(dashboard_bp)
+app.register_blueprint(reports_bp)
+
+# ─── HTML Pages ──────────────────────────────────────────────
+
+@app.route("/")
+def index_page():
+    """Renderiza la página principal con resumen y estadísticas."""
+    return render_template("pages/index.html")
+
+
+@app.route("/similarity")
+def similarity_page():
+    """Renderiza la página de comparación de similitud entre activos."""
+    return render_template("pages/similarity.html")
+
+
+@app.route("/patterns")
+def patterns_page():
+    """Renderiza la página de detección de patrones."""
+    return render_template("pages/patterns.html", patterns_page=True)
+
+
+@app.route("/risk")
+def risk_page():
+    """Renderiza la página de clasificación de riesgo por volatilidad."""
+    return render_template("pages/risk.html")
+
+
+@app.route("/dashboard")
+def dashboard_page():
+    """Renderiza el dashboard completo con heatmap, candlestick y exportación PDF."""
+    return render_template("pages/dashboard.html")
+
+
 def create_app():
-    """Factory function para crear la aplicación Flask."""
+    """Retorna la instancia de la aplicación Flask para uso externo (ej. gunicorn)."""
     return app
 
 

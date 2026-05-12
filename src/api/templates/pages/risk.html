@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Riesgo{% endblock %}
+{% block content %}
+<h1>Ranking de Riesgo</h1>
+<p class="subtitle">Clasificación de activos por volatilidad histórica anualizada.</p>
+
+<div id="loading" class="text-center text-muted mb-4">Cargando ranking...</div>
+
+<div id="results" style="display:none;">
+    <div class="grid-4" id="summaryStats"></div>
+
+    <div class="card">
+        <h2>Ranking Completo</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Activo</th>
+                    <th>Volatilidad Anual</th>
+                    <th>σ Diaria</th>
+                    <th>Retorno Medio Diario</th>
+                    <th>Categoría</th>
+                </tr>
+            </thead>
+            <tbody id="rankingTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Distribución de Riesgo</h2>
+        <div class="chart-container-sm">
+            <canvas id="distributionChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Clasificación</h2>
+        <table>
+            <tr><td class="risk-conservative">🟢 Conservador</td><td>Volatilidad &lt; 15%</td><td id="countConservative">0</td></tr>
+            <tr><td class="risk-moderate">🟡 Moderado</td><td>Volatilidad 15% – 30%</td><td id="countModerate">0</td></tr>
+            <tr><td class="risk-aggressive">🔴 Agresivo</td><td>Volatilidad &gt; 30%</td><td id="countAggressive">0</td></tr>
+        </table>
+    </div>
+</div>
+
+<script>
+let distributionChart = null;
+
+async function loadRanking() {
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+
+    try {
+        const res = await fetch('/api/volatility/ranking');
+        const data = await res.json();
+
+        if (data.error) { showError('results', data.error); loading.style.display = 'none'; return; }
+
+        const summary = document.getElementById('summaryStats');
+        summary.innerHTML = `
+            <div class="stat-card"><div class="value">${data.summary.total_symbols}</div><div class="label">Activos</div></div>
+            <div class="stat-card"><div class="value">${data.summary.average_volatility_pct}%</div><div class="label">Vol. Promedio</div></div>
+            <div class="stat-card"><div class="value" style="color:#059669;">${data.summary.min_volatility.vol_pct}%</div><div class="label">Mín: ${data.summary.min_volatility.symbol}</div></div>
+            <div class="stat-card"><div class="value" style="color:#dc2626;">${data.summary.max_volatility.vol_pct}%</div><div class="label">Máx: ${data.summary.max_volatility.symbol}</div></div>
+        `;
+
+        const tbody = document.getElementById('rankingTable');
+        tbody.innerHTML = data.ranking.map((r, i) => {
+            const badgeClass = r.risk_category === 'conservador' ? 'badge-conservative' :
+                              r.risk_category === 'moderado' ? 'badge-moderate' : 'badge-aggressive';
+            const textClass = r.risk_category === 'conservador' ? 'risk-conservative' :
+                             r.risk_category === 'moderado' ? 'risk-moderate' : 'risk-aggressive';
+            return `<tr>
+                <td>${i + 1}</td>
+                <td><strong>${r.symbol}</strong></td>
+                <td>${r.annualized_volatility_pct}%</td>
+                <td>${(r.daily_std * 100).toFixed(3)}%</td>
+                <td>${r.mean_daily_return_pct}%</td>
+                <td><span class="badge ${badgeClass}">${r.risk_category.toUpperCase()}</span></td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('countConservative').textContent = data.summary.categories.conservador || 0;
+        document.getElementById('countModerate').textContent = data.summary.categories.moderado || 0;
+        document.getElementById('countAggressive').textContent = data.summary.categories.agresivo || 0;
+
+        renderDistribution(data);
+        results.style.display = 'block';
+    } catch(e) { showError('results', 'Error al cargar ranking'); }
+    loading.style.display = 'none';
+}
+
+function renderDistribution(data) {
+    if (distributionChart) distributionChart.destroy();
+    const cats = data.summary.categories;
+    const ctx = document.getElementById('distributionChart');
+    if (!ctx) return;
+    distributionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Conservador', 'Moderado', 'Agresivo'],
+            datasets: [{
+                data: [cats.conservador || 0, cats.moderado || 0, cats.agresivo || 0],
+                backgroundColor: ['#059669', '#d97706', '#dc2626'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
+loadRanking();
+</script>
+{% endblock %}

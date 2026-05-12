@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<h1>Investment Algorithm Dashboard</h1>
+<p class="subtitle">Análisis algorítmico de activos financieros — Universidad del Quindío</p>
+
+<div class="grid-4" id="statsGrid">
+    <div class="stat-card"><div class="value" id="statAssets">-</div><div class="label">Activos</div></div>
+    <div class="stat-card"><div class="value" id="statRecords">-</div><div class="label">Registros</div></div>
+    <div class="stat-card"><div class="value" id="statDateRange">-</div><div class="label">Rango Fechas</div></div>
+    <div class="stat-card"><div class="value" id="statVolume">-</div><div class="label">Vol. Promedio</div></div>
+</div>
+
+<div class="card">
+    <h2>Activos del Portafolio</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Símbolo</th>
+                <th>Tipo</th>
+                <th>Mercado</th>
+            </tr>
+        </thead>
+        <tbody id="symbolsTable"></tbody>
+    </table>
+</div>
+
+<script>
+async function loadStats() {
+    try {
+        const res = await fetch('/api/statistics');
+        const data = await res.json();
+        document.getElementById('statAssets').textContent = data.dataset.unique_symbols || '-';
+        document.getElementById('statRecords').textContent = (data.dataset.total_records || 0).toLocaleString();
+        if (data.dataset.date_range) {
+            document.getElementById('statDateRange').textContent =
+                data.dataset.date_range[0] + ' — ' + data.dataset.date_range[1];
+        }
+        document.getElementById('statVolume').textContent =
+            data.dataset.average_volume ? Math.round(data.dataset.average_volume).toLocaleString() : '-';
+    } catch(e) { /* datos no disponibles */ }
+}
+
+async function loadSymbols() {
+    try {
+        const res = await fetch('/api/similarity/symbols');
+        const data = await res.json();
+        const tbody = document.getElementById('symbolsTable');
+        data.symbols.forEach(sym => {
+            const market = data.market_map[sym] || 'nyse';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${sym}</strong></td>
+                <td>${market === 'bvc' ? 'Acción' : 'ETF'}</td>
+                <td>${market === 'bvc' ? 'BVC (Colombia)' : 'NYSE/NASDAQ (USA)'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch(e) { /* */ }
+}
+
+loadStats();
+loadSymbols();
+</script>
+{% endblock %}

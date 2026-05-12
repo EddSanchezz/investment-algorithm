@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investment Algorithm - {% block title %}Dashboard{% endblock %}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>📊 Inv. Algorithm</h2>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="/" class="{% if request.path == '/' %}active{% endif %}">Inicio</a></li>
+            <li><a href="/similarity" class="{% if 'similarity' in request.path %}active{% endif %}">Similitud</a></li>
+            <li><a href="/patterns" class="{% if 'patterns' in request.path %}active{% endif %}">Patrones</a></li>
+            <li><a href="/risk" class="{% if 'risk' in request.path %}active{% endif %}">Riesgo</a></li>
+            <li><a href="/dashboard" class="{% if 'dashboard' in request.path %}active{% endif %}">Dashboard</a></li>
+            <li><a href="/api/health" target="_blank">API Docs</a></li>
+        </ul>
+    </nav>
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+</body>
+</html>

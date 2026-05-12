@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Similitud{% endblock %}
+{% block content %}
+<h1>Análisis de Similitud</h1>
+<p class="subtitle">Compare dos activos financieros usando 4 algoritmos de similitud diferentes.</p>
+
+<div class="card">
+    <div class="form-row">
+        <div class="form-group">
+            <label for="symbol1">Activo 1</label>
+            <select id="symbol1"></select>
+        </div>
+        <div class="form-group">
+            <label for="symbol2">Activo 2</label>
+            <select id="symbol2"></select>
+        </div>
+        <button class="btn" onclick="calculateSimilarity()">Calcular Similitud</button>
+    </div>
+</div>
+
+<div id="results" style="display:none;">
+    <div class="card">
+        <h2>Precios Históricos</h2>
+        <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Resultados de Similitud</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Algoritmo</th>
+                    <th>Valor</th>
+                    <th>Interpretación</th>
+                    <th>Complejidad</th>
+                </tr>
+            </thead>
+            <tbody id="resultsTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Detalle de Algoritmos</h2>
+        <div id="algorithmDetails"></div>
+    </div>
+</div>
+
+<div id="loading" style="display:none;" class="text-center text-muted mb-4">Calculando...</div>
+
+<script>
+let priceChart = null;
+
+async function loadSymbols() {
+    try {
+        const res = await fetch('/api/similarity/symbols');
+        const data = await res.json();
+        const s1 = document.getElementById('symbol1');
+        const s2 = document.getElementById('symbol2');
+        data.symbols.forEach(sym => {
+            s1.innerHTML += `<option value="${sym}">${sym}</option>`;
+            s2.innerHTML += `<option value="${sym}">${sym}</option>`;
+        });
+        if (data.symbols.length >= 2) {
+            s2.selectedIndex = Math.min(1, data.symbols.length - 1);
+        }
+    } catch (e) {
+        showError('results', 'Error al cargar símbolos');
+    }
+}
+
+async function calculateSimilarity() {
+    const s1 = document.getElementById('symbol1').value;
+    const s2 = document.getElementById('symbol2').value;
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+
+    loading.style.display = 'block';
+    results.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/similarity?s1=${s1}&s2=${s2}`);
+        const data = await res.json();
+
+        if (data.error) {
+            showError('results', data.error);
+            loading.style.display = 'none';
+            return;
+        }
+
+        renderPriceChart(data);
+        renderResultsTable(data);
+        renderAlgorithmDetails(data);
+        results.style.display = 'block';
+    } catch (e) {
+        showError('results', 'Error al calcular similitud');
+    }
+    loading.style.display = 'none';
+}
+
+function renderPriceChart(data) {
+    if (priceChart) priceChart.destroy();
+    const series = data.series;
+    priceChart = createLineChart(
+        'priceChart',
+        series.dates,
+        [
+            { label: data.symbol1, data: series[data.symbol1], color: '#6c63ff' },
+            { label: data.symbol2, data: series[data.symbol2], color: '#ef4444' }
+        ],
+        `Precios: ${data.symbol1} vs ${data.symbol2} (${data.common_dates} días)`
+    );
+}
+
+function renderResultsTable(data) {
+    const tbody = document.getElementById('resultsTable');
+    const algorithms = [
+        { key: 'euclidean', name: 'Distancia Euclidiana', complexity: 'O(n)' },
+        { key: 'pearson', name: 'Correlación de Pearson', complexity: 'O(n)' },
+        { key: 'dtw', name: 'Dynamic Time Warping (DTW)', complexity: data.dtw.complexity },
+        { key: 'cosine', name: 'Similitud por Coseno', complexity: 'O(n)' }
+    ];
+
+    tbody.innerHTML = '';
+    algorithms.forEach(alg => {
+        const val = data[alg.key];
+        const value = val.distance !== undefined ? val.distance :
+                      val.correlation !== undefined ? val.correlation :
+                      val.similarity !== undefined ? val.similarity : 'N/A';
+        const interpretation = val.interpretation || val.description || '';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><strong>${alg.name}</strong></td>
+            <td>${typeof value === 'number' ? value.toFixed(6) : value}</td>
+            <td class="text-muted">${interpretation.substring(0, 120)}</td>
+            <td><code>${alg.complexity}</code></td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function renderAlgorithmDetails(data) {
+    const container = document.getElementById('algorithmDetails');
+    const details = [
+        {
+            title: 'Distancia Euclidiana',
+            formula: data.euclidean.formula,
+            desc: data.euclidean.description,
+            detail: `Distancia: ${data.euclidean.distance} | Observaciones: ${data.euclidean.n}`
+        },
+        {
+            title: 'Correlación de Pearson',
+            formula: data.pearson.formula,
+            desc: data.pearson.description,
+            detail: `r = ${data.pearson.correlation} | Covarianza: ${data.pearson.covariance} | n = ${data.pearson.n}`
+        },
+        {
+            title: 'Dynamic Time Warping (DTW)',
+            formula: data.dtw.formula,
+            desc: data.dtw.description,
+            detail: `DTW = ${data.dtw.distance} | Normalizado = ${data.dtw.normalized_distance} | Camino: ${data.dtw.path_length} pasos`
+        },
+        {
+            title: 'Similitud por Coseno',
+            formula: data.cosine.formula,
+            desc: data.cosine.description,
+            detail: `cos(θ) = ${data.cosine.similarity} | Ángulo: ${data.cosine.angle_degrees}° | n = ${data.cosine.n}`
+        }
+    ];
+
+    container.innerHTML = details.map(d => `
+        <div style="margin-bottom:16px; padding:16px; background:#f9fafb; border-radius:8px;">
+            <h3 style="margin-bottom:8px;">${d.title}</h3>
+            <p style="font-family:monospace; background:#e5e7eb; padding:8px; border-radius:4px; margin-bottom:8px; font-size:13px;">
+                ${d.formula}
+            </p>
+            <p class="text-muted mb-2">${d.desc}</p>
+            <p class="text-muted" style="font-size:12px;">${d.detail}</p>
+        </div>
+    `).join('');
+}
+
+loadSymbols();
+</script>
+{% endblock %}

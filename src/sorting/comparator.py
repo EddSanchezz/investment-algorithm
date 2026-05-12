@@ -66,7 +66,7 @@ class SortingComparator:
 
             return [{"sort_key": parse_key(r), **r} for r in records]
         else:
-            return [{"sort_key": r[sort_key], **r} for r in records]
+            return [{"sort_key": r.get(sort_key, 0), **r} for r in records]
 
     def benchmark_algorithm(
         self, algorithm: Callable, data: List[Dict], runs: int = 3
@@ -128,6 +128,15 @@ class SortingComparator:
             print(f"Evaluando {name}...")
             stats = self.benchmark_algorithm(algorithm, data, runs)
 
+            comparisons_accum = 0
+            swaps_accum = 0
+            for _ in range(runs):
+                self.sorter.comparison_count = 0
+                self.sorter.swap_count = 0
+                algorithm(data.copy())
+                comparisons_accum += self.sorter.comparison_count
+                swaps_accum += self.sorter.swap_count
+
             results.append(
                 {
                     "algorithm": name,
@@ -136,8 +145,8 @@ class SortingComparator:
                     "average_time": stats["average_time"],
                     "min_time": stats["min_time"],
                     "max_time": stats["max_time"],
-                    "comparisons": self.sorter.comparison_count,
-                    "swaps": self.sorter.swap_count,
+                    "comparisons": comparisons_accum // runs,
+                    "swaps": swaps_accum // runs,
                 }
             )
 

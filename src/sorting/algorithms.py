@@ -656,7 +656,7 @@ class SortingAlgorithms:
             except TypeError:
                 should_swap = str(arr[i]["sort_key"]) > str(arr[j]["sort_key"])
 
-            if direction != should_swap:
+            if direction == should_swap:
                 arr[i], arr[j] = arr[j], arr[i]
                 self.swap_count += 1
             self.comparison_count += 1
