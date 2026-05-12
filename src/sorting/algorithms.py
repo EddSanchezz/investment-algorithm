@@ -15,11 +15,11 @@ class SortingAlgorithms:
     Cada diccionario representa un registro financiero a ordenar.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.comparison_count = 0
         self.swap_count = 0
 
-    def reset_counters(self):
+    def reset_counters(self) -> None:
         """Reinicia los contadores de comparaciones e intercambios."""
         self.comparison_count = 0
         self.swap_count = 0

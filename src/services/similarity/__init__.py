@@ -157,7 +157,6 @@ class SimilarityAnalyzer:
         """
         n = len(symbols)
         matrix = [[0.0] * n for _ in range(n)]
-        results_info = {}
 
         for i in range(n):
             for j in range(i, n):

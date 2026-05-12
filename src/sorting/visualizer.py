@@ -20,7 +20,7 @@ class SortingVisualizer:
     Complejidad de generación de gráficos: O(n) para preparar datos
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.colors = [
             "#2E86AB",
             "#A23B72",

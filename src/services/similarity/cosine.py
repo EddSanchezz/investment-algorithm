@@ -81,7 +81,7 @@ def cosine_similarity(series1: List[float], series2: List[float]) -> dict:
     norm2_sqrt = norm2 ** 0.5
 
     if norm1_sqrt == 0 or norm2_sqrt == 0:
-        similarity = 0.0
+        clamped = 0.0
         angle_degrees = 90.0
     else:
         similarity = dot_product / (norm1_sqrt * norm2_sqrt)

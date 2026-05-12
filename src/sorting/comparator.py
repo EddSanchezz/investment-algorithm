@@ -18,7 +18,7 @@ class SortingComparator:
     Complejidad de benchmarking: O(m * n log n) donde m = número de algoritmos
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.sorter = SortingAlgorithms()
         self.algorithms = {
             "TimSort": self.sorter.tim_sort,
