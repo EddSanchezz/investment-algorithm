@@ -239,9 +239,379 @@ table tr:hover {
 .text-muted { color: #6b7280; font-size: 13px; }
 .loading { opacity: 0.6; pointer-events: none; }
 
+/* ─── Tab Navigation ────────────────────────────────── */
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    position: sticky;
+    top: 10px;
+    z-index: 50;
+}
+
+.tab-btn {
+    padding: 10px 18px;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.tab-btn:hover {
+    background: #f3f4f6;
+    color: #1a1a2e;
+}
+
+.tab-btn.active {
+    background: #6c63ff;
+    color: #fff;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ─── Section Headers ────────────────────────────────── */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.section-header h2 {
+    margin-bottom: 0;
+}
+
+.section-desc {
+    color: #6b7280;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+/* ─── Grid Variants ────────────────────────────────── */
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+/* ─── Stat Card Variants ────────────────────────────── */
+.stat-card-sm {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    text-align: center;
+}
+
+.stat-card-sm .value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.stat-card-sm .label {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+.stat-card-accent {
+    border-top: 3px solid #6c63ff;
+}
+
+/* ─── Info Table ────────────────────────────────── */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #f9fafb;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.info-item .label {
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.info-item .value {
+    color: #1a1a2e;
+    font-weight: 600;
+    text-align: right;
+}
+
+/* ─── Provider Chain ────────────────────────────────── */
+.provider-chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: #f9fafb;
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.provider-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.provider-step .step-num {
+    background: #6c63ff;
+    color: #fff;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.provider-arrow {
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+/* ─── Scrollable Table Container ────────────────────── */
+.table-scroll {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.table-scroll table {
+    font-size: 12px;
+}
+
+.table-scroll table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+/* ─── Metric Card ────────────────────────────────── */
+.metric-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #f3f4f6;
+}
+
+.metric-card h4 {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metric-card .metric-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.metric-card .metric-sub {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+/* ─── Correlation Table ────────────────────────────────── */
+.corr-table td, .corr-table th {
+    white-space: nowrap;
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+.corr-table th {
+    font-size: 10px;
+}
+
+/* ─── Badge for table cells ──────────────────────────── */
+.badge-cell {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ─── Pattern Result ────────────────────────────────── */
+.pattern-stat {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+}
+
+.pattern-stat-item {
+    background: #f9fafb;
+    padding: 12px 20px;
+    border-radius: 10px;
+    text-align: center;
+    min-width: 120px;
+}
+
+.pattern-stat-item .num {
+    font-size: 24px;
+    font-weight: 700;
+    color: #6c63ff;
+}
+
+.pattern-stat-item .desc {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+/* ─── Chart Container Small ────────────────────────── */
+.chart-container-sm {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+.chart-container-xs {
+    position: relative;
+    height: 250px;
+    width: 100%;
+}
+
+/* ─── Algorithm Complexity Badge ────────────────────── */
+.complexity-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+.complexity-O1 { background: #d1fae5; color: #065f46; }
+.complexity-On { background: #dbeafe; color: #1e40af; }
+.complexity-Onlogn { background: #fef3c7; color: #92400e; }
+.complexity-On2 { background: #fee2e2; color: #991b1b; }
+.complexity-Onk { background: #ede9fe; color: #5b21b6; }
+.complexity-Olog2n { background: #fce7f3; color: #9d174d; }
+
+/* ─── Top Finishers Podium ────────────────────────── */
+.podium {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 12px;
+    margin: 16px 0;
+    padding: 16px;
+}
+
+.podium-item {
+    text-align: center;
+    padding: 12px 20px;
+    border-radius: 10px;
+    min-width: 120px;
+}
+
+.podium-item .rank {
+    font-size: 28px;
+    font-weight: 800;
+}
+
+.podium-item .symbol {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 4px 0;
+}
+
+.podium-item .value {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.podium-gold { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+.podium-silver { background: linear-gradient(135deg, #f3f4f6, #e5e7eb); }
+.podium-bronze { background: linear-gradient(135deg, #fed7aa, #fdba74); }
+
+/* ─── Form Row Enhancements ────────────────────────── */
+.form-row {
+    display: flex;
+    gap: 12px;
+    align-items: end;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+/* ─── Chart Row (two charts side by side) ───────────── */
+.chart-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 1024px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .chart-row { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 768px) {
     .sidebar { width: 60px; }
-    .sidebar-header h2, .sidebar-nav li a span { display: none; }
+    .sidebar-header h2, .sidebar-nav li a { font-size: 0; }
+    .sidebar-nav li a::before { font-size: 14px; }
     .main-content { margin-left: 60px; max-width: calc(100vw - 60px); }
     .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .tab-nav { overflow-x: auto; flex-wrap: nowrap; }
+    .tab-btn { font-size: 12px; padding: 8px 12px; }
+    .podium { flex-direction: column; align-items: center; }
 }

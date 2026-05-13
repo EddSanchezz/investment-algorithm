@@ -1,11 +1,12 @@
 """
-Rutas del Dashboard — API REST para candlestick, SMA y datos del dashboard.
+Rutas del Dashboard — API REST para candlestick, SMA, cleaning stats y datos del dashboard.
 """
 
 from flask import Blueprint, jsonify, request
 from src.api.gateway import get_records
 from src.services.similarity import SimilarityAnalyzer
 from src.services.reporting.technical import simple_moving_average
+import os
 
 dashboard_bp = Blueprint("dashboard", __name__)
 analyzer = SimilarityAnalyzer()
@@ -130,4 +131,75 @@ def dashboard_summary():
                 "value": round(lowest_pair[2], 4) if lowest_pair else None,
             } if lowest_pair else None,
         },
+    })
+
+
+@dashboard_bp.route("/api/etl/cleaning-stats", methods=["GET"])
+def cleaning_stats():
+    """
+    Retorna estadísticas de limpieza ETL y calidad de datos.
+
+    Incluye:
+    - Proveedores de datos disponibles
+    - Calidad: nulos por campo, registros por símbolo
+    - Cobertura temporal por mercado
+    """
+    records = get_records()
+    if not records:
+        return jsonify({"error": "No hay datos disponibles"}), 404
+
+    total = len(records)
+    symbols = sorted(set(r["symbol"] for r in records))
+    dates = sorted(set(r["date"] for r in records))
+
+    nulls = {"open": 0, "high": 0, "low": 0, "close": 0, "volume": 0}
+    for r in records:
+        for f in nulls:
+            if r.get(f) is None:
+                nulls[f] += 1
+
+    per_symbol = {}
+    for s in symbols:
+        sym_recs = [r for r in records if r["symbol"] == s]
+        sym_dates = sorted(set(r["date"] for r in sym_recs))
+        sym_nulls = sum(1 for r in sym_recs if r.get("close") is None)
+        per_symbol[s] = {
+            "records": len(sym_recs),
+            "trading_days": len(sym_dates),
+            "null_closes": sym_nulls,
+            "date_from": sym_dates[0] if sym_dates else None,
+            "date_to": sym_dates[-1] if sym_dates else None,
+        }
+
+    raw_path = "data/raw/raw_data.csv"
+    raw_exists = os.path.exists(raw_path)
+    raw_records = 0
+    if raw_exists:
+        import csv
+        with open(raw_path, "r", encoding="utf-8") as f:
+            raw_records = sum(1 for _ in csv.DictReader(f))
+
+    records_diff = raw_records - total if raw_records > 0 else None
+
+    bvc_symbols = [s for s in symbols if s in {"ECOPETROL", "ISA", "GEB", "NUTRESA"}]
+    nyse_symbols = [s for s in symbols if s not in bvc_symbols]
+
+    return jsonify({
+        "providers": {
+            "available": ["Tiingo API", "Yahoo Finance API", "Alpha Vantage", "Web Scraper (5 sitios)", "Binance"],
+            "active": "Multi-Source con fallback automático",
+        },
+        "quality": {
+            "total_records": total,
+            "raw_records": raw_records,
+            "records_removed": records_diff if records_diff else "N/A",
+            "unique_symbols": len(symbols),
+            "trading_days": len(dates),
+            "date_range": {"start": dates[0], "end": dates[-1]},
+            "nulls_by_field": nulls,
+            "nulls_percentage": {k: round(v / total * 100, 2) for k, v in nulls.items()},
+            "symbols_bvc": len(bvc_symbols),
+            "symbols_nyse": len(nyse_symbols),
+        },
+        "per_symbol": per_symbol,
     })

@@ -1,203 +1,887 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Dashboard Integral{% endblock %}
 {% block content %}
-<h1>Dashboard Completo</h1>
-<p class="subtitle">Matriz de correlación, gráfico de velas con medias móviles y exportación PDF.</p>
+<h1>Dashboard Integral</h1>
+<p class="subtitle">Análisis completo del portafolio — extraído dinámicamente de la API sin datos hardcodeados.</p>
 
-<div class="grid-4" id="summaryCards"></div>
+<nav class="tab-nav" id="tabNav">
+  <button class="tab-btn active" data-tab="resumen">Resumen</button>
+  <button class="tab-btn" data-tab="correlation">Correlación</button>
+  <button class="tab-btn" data-tab="risk">Riesgo</button>
+  <button class="tab-btn" data-tab="similarity">Similitud</button>
+  <button class="tab-btn" data-tab="patterns">Patrones</button>
+  <button class="tab-btn" data-tab="technical">Técnico</button>
+  <button class="tab-btn" data-tab="benchmark">Benchmark</button>
+  <button class="tab-btn" data-tab="export">Exportar</button>
+</nav>
 
-<div class="card">
-    <h2>Matriz de Correlación</h2>
-    <p class="text-muted mb-4">Coeficiente de Pearson entre todos los pares de activos. Rojo = correlación negativa, Azul = positiva.</p>
-    <div style="overflow-x:auto;">
-        <table id="correlationTable" style="font-size:11px;"></table>
+{# ─── TAB: RESUMEN ─── #}
+<div class="tab-content active" id="tab-resumen">
+  <div class="grid-4" id="heroCards"></div>
+
+  <div class="card">
+    <h2>Portafolio de Activos</h2>
+    <p class="section-desc">Los 19 activos del portafolio con clasificación de riesgo y métricas clave.</p>
+    <div class="table-scroll" id="portfolioTableContainer"><table id="portfolioTable"></table></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Fuentes de Datos</h2>
+      <p class="section-desc" id="providerDesc"></p>
+      <div class="provider-chain" id="providerChain"></div>
+      <div class="info-grid" id="dataQuality"></div>
     </div>
+    <div class="card">
+      <h2>Detalle por Símbolo</h2>
+      <p class="section-desc">Registros y calidad de datos por activo.</p>
+      <div class="table-scroll" id="perSymbolTableContainer"><table id="perSymbolTable"></table></div>
+    </div>
+  </div>
 </div>
 
-<div class="card">
+{# ─── TAB: CORRELACIÓN ─── #}
+<div class="tab-content" id="tab-correlation">
+  <div class="grid-3" id="corrHeroCards"></div>
+  <div class="card">
+    <h2>Matriz de Correlación (Pearson)</h2>
+    <p class="section-desc">Coeficiente de Pearson entre todos los pares de activos. Azul = correlación positiva, Rojo = negativa. Intensidad del color = magnitud.</p>
+    <div class="table-scroll"><table class="corr-table" id="correlationTable"></table></div>
+  </div>
+</div>
+
+{# ─── TAB: RIESGO ─── #}
+<div class="tab-content" id="tab-risk">
+  <div class="grid-4" id="riskHeroCards"></div>
+  <div class="grid-2">
+    <div class="card">
+      <h2>Distribución de Riesgo</h2>
+      <div class="chart-container-sm"><canvas id="riskDoughnutChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Volatilidad por Activo</h2>
+      <div class="chart-container-sm"><canvas id="riskBarChart"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Ranking Completo de Volatilidad</h2>
+    <p class="section-desc">Ordenado de menor a mayor volatilidad anualizada.</p>
+    <div class="table-scroll" id="riskTableContainer"><table id="riskTable"></table></div>
+  </div>
+</div>
+
+{# ─── TAB: SIMILITUD ─── #}
+<div class="tab-content" id="tab-similarity">
+  <div class="card">
     <div class="form-row">
-        <div class="form-group">
-            <label for="candleSymbol">Activo</label>
-            <select id="candleSymbol"></select>
-        </div>
-        <div class="form-group">
-            <label for="sma20">SMA-20</label>
-            <input type="checkbox" id="sma20" checked>
-        </div>
-        <div class="form-group">
-            <label for="sma50">SMA-50</label>
-            <input type="checkbox" id="sma50" checked>
-        </div>
-        <button class="btn" onclick="loadCandlestick()">Actualizar</button>
-        <button class="btn btn-secondary" onclick="downloadPDF()">📥 Exportar PDF</button>
+      <div class="form-group">
+        <label for="simS1">Activo 1</label>
+        <select id="simS1"></select>
+      </div>
+      <div class="form-group">
+        <label for="simS2">Activo 2</label>
+        <select id="simS2"></select>
+      </div>
+      <button class="btn" onclick="loadSimilarity()">Comparar</button>
     </div>
-    <div class="chart-container">
-        <canvas id="candleChart"></canvas>
-    </div>
+  </div>
+  <div class="grid-2" id="simMetricCards"></div>
+  <div class="card">
+    <h2>Comparación de Precios</h2>
+    <div class="chart-container"><canvas id="simChart"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>Resultados Detallados</h2>
+    <div class="table-scroll" id="simTableContainer"><table id="simTable"></table></div>
+  </div>
 </div>
 
-<div id="loading" style="display:none;" class="text-center text-muted mb-4">Cargando dashboard...</div>
+{# ─── TAB: PATRONES ─── #}
+<div class="tab-content" id="tab-patterns">
+  <div class="card">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="patSymbol">Activo</label>
+        <select id="patSymbol"></select>
+      </div>
+      <div class="form-group">
+        <label for="patType">Patrón</label>
+        <select id="patType">
+          <option value="consecutive_up">Días Consecutivos al Alza</option>
+          <option value="gap_up">Gap Up</option>
+        </select>
+      </div>
+      <div class="form-group" id="patMinDaysGroup">
+        <label for="patMinDays">Días mínimos</label>
+        <input type="number" id="patMinDays" value="3" min="2" max="10">
+      </div>
+      <div class="form-group" id="patThresholdGroup" style="display:none;">
+        <label for="patThreshold">Umbral Gap (%)</label>
+        <input type="number" id="patThreshold" value="2" min="0.5" max="20" step="0.5">
+      </div>
+      <button class="btn" onclick="loadPatterns()">Analizar</button>
+    </div>
+  </div>
+  <div id="patternResults"></div>
+</div>
+
+{# ─── TAB: TÉCNICO ─── #}
+<div class="tab-content" id="tab-technical">
+  <div class="card">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="techSymbol">Activo</label>
+        <select id="techSymbol"></select>
+      </div>
+      <div class="form-group">
+        <label>SMA-20</label>
+        <input type="checkbox" id="techSma20" checked>
+      </div>
+      <div class="form-group">
+        <label>SMA-50</label>
+        <input type="checkbox" id="techSma50" checked>
+      </div>
+      <div class="form-group">
+        <label for="techLimit">Registros</label>
+        <select id="techLimit">
+          <option value="252">1 año</option>
+          <option value="504">2 años</option>
+          <option value="756">3 años</option>
+          <option value="0" selected>Todo</option>
+        </select>
+      </div>
+      <button class="btn" onclick="loadTechnical()">Actualizar</button>
+    </div>
+  </div>
+  <div class="chart-row">
+    <div class="card">
+      <h2>Precio de Cierre y Medias Móviles</h2>
+      <div class="chart-container"><canvas id="techChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Volumen de Negociación</h2>
+      <div class="chart-container"><canvas id="volumeChart"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Top Días por Volumen</h2>
+    <div class="table-scroll" id="topVolumeContainer"><table id="topVolumeTable"></table></div>
+  </div>
+</div>
+
+{# ─── TAB: BENCHMARK ─── #}
+<div class="tab-content" id="tab-benchmark">
+  <div class="grid-3" id="benchHeroCards"></div>
+  <div class="grid-2">
+    <div class="card">
+      <h2>Tiempo de Ejecución por Algoritmo</h2>
+      <div class="chart-container"><canvas id="benchChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Comparaciones vs Swaps</h2>
+      <div class="chart-container"><canvas id="benchOpsChart"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Resultados Detallados del Benchmark</h2>
+    <p class="section-desc">12 algoritmos de ordenamiento evaluados sobre el dataset unificado.</p>
+    <div class="table-scroll" id="benchTableContainer"><table id="benchTable"></table></div>
+  </div>
+</div>
+
+{# ─── TAB: EXPORTAR ─── #}
+<div class="tab-content" id="tab-export">
+  <div class="card">
+    <h2>Exportar Reporte PDF</h2>
+    <p class="section-desc">Genera un reporte técnico completo con portada, matriz de correlación, ranking de riesgo, candlestick con SMA y tabla de similitud.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="pdfSymbol">Activo para gráfico de velas</label>
+        <select id="pdfSymbol"></select>
+      </div>
+      <button class="btn" onclick="downloadPDF(event)">📥 Generar PDF</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Resumen del Reporte</h2>
+    <p class="section-desc">El PDF incluye:</p>
+    <ul style="line-height:2; color:#374151; font-size:14px;">
+      <li>📄 <strong>Portada</strong> — Universidad, curso, título, fecha de generación</li>
+      <li>📊 <strong>Matriz de Correlación</strong> — Heatmap generado con matplotlib</li>
+      <li>📈 <strong>Ranking de Riesgo</strong> — Tabla completa con colores por categoría</li>
+      <li>🕯️ <strong>Candlestick + SMA</strong> — Gráfico OHLC con medias móviles</li>
+      <li>🔗 <strong>Similitud</strong> — 4 métricas del par más correlacionado</li>
+    </ul>
+  </div>
+</div>
+
+<div id="loading" style="display:none;" class="text-center text-muted mb-4">Cargando...</div>
 
 <script>
-let candleChart = null;
+// ─── GLOBAL STATE ───
+let charts = {};
 
-async function loadDashboard() {
-    document.getElementById('loading').style.display = 'block';
-    try {
-        const res = await fetch('/api/dashboard/summary');
-        const data = await res.json();
-
-        const cards = document.getElementById('summaryCards');
-        cards.innerHTML = `
-            <div class="stat-card"><div class="value">${data.total_symbols}</div><div class="label">Activos</div></div>
-            <div class="stat-card"><div class="value">${(data.total_records || 0).toLocaleString()}</div><div class="label">Registros</div></div>
-            <div class="stat-card"><div class="value">${data.date_range ? data.date_range.start + ' — ' + data.date_range.end : '-'}</div><div class="label">Rango Fechas</div></div>
-            <div class="stat-card"><div class="value">${data.volatility_summary ? data.volatility_summary.average_volatility_pct + '%' : '-'}</div><div class="label">Vol. Promedio</div></div>
-        `;
-    } catch(e) {}
-    document.getElementById('loading').style.display = 'none';
+function destroyAllCharts() {
+  Object.values(charts).forEach(c => { if (c) c.destroy(); });
+  charts = {};
 }
 
-async function loadCorrelationMatrix() {
-    try {
-        const res = await fetch('/api/correlation-matrix');
-        const data = await res.json();
-        const table = document.getElementById('correlationTable');
-        const syms = data.symbols;
-        const mat = data.matrix;
+// ─── TAB SYSTEM ───
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    const tab = this.dataset.tab;
+    document.getElementById('tab-' + tab).classList.add('active');
+    destroyAllCharts();
+    loadTab(tab);
+  });
+});
 
-        let html = '<tr><th style="min-width:60px;">Activo</th>';
-        syms.forEach(s => { html += `<th style="min-width:50px; font-size:10px;">${s}</th>`; });
-        html += '</tr>';
-
-        syms.forEach((sym, i) => {
-            html += `<tr><td><strong>${sym}</strong></td>`;
-            mat[i].forEach(val => {
-                const absVal = Math.abs(val);
-                let color;
-                if (val > 0) color = `rgba(37, 99, 235, ${absVal})`;
-                else if (val < 0) color = `rgba(220, 38, 38, ${absVal})`;
-                else color = '#f3f4f6';
-                const textColor = absVal > 0.6 ? 'white' : '#1a1a2e';
-                html += `<td style="background:${color}; color:${textColor}; text-align:center; font-weight:${absVal > 0.7 ? 'bold' : 'normal'};">${val.toFixed(2)}</td>`;
-            });
-            html += '</tr>';
-        });
-        table.innerHTML = html;
-    } catch(e) {}
+async function loadTab(tab) {
+  try {
+    if (tab === 'resumen') await Promise.all([loadHero(), loadPortfolio(), loadETL()]);
+    else if (tab === 'correlation') await loadCorrelation();
+    else if (tab === 'risk') await loadRisk();
+    else if (tab === 'similarity') { await loadSymbolSelectors(); }
+    else if (tab === 'patterns') { await loadPatSymbols(); }
+    else if (tab === 'technical') { await loadTechSelectors(); }
+    else if (tab === 'benchmark') await loadBenchmark();
+    else if (tab === 'export') await loadPdfSymbols();
+  } catch(e) { console.error('Tab load error:', e); }
 }
 
-async function loadCandleSymbols() {
-    try {
-        const res = await fetch('/api/similarity/symbols');
-        const data = await res.json();
-        const sel = document.getElementById('candleSymbol');
-        data.symbols.forEach(s => { sel.innerHTML += `<option value="${s}">${s}</option>`; });
-        if (data.symbols.length > 0) loadCandlestick();
-    } catch(e) {}
+// Init: load resumen tab by default
+document.addEventListener('DOMContentLoaded', () => loadTab('resumen'));
+
+// ─── FIND COMMON SYMBOLS FOR ALL SELECTORS ───
+let allSymbols = [];
+
+async function getSymbols() {
+  if (allSymbols.length) return allSymbols;
+  const res = await fetch('/api/similarity/symbols');
+  const data = await res.json();
+  allSymbols = data.symbols || [];
+  return allSymbols;
 }
 
-async function loadCandlestick() {
-    const symbol = document.getElementById('candleSymbol').value;
-    const showSMA20 = document.getElementById('sma20').checked;
-    const showSMA50 = document.getElementById('sma50').checked;
+function populateSelect(id, symbols, defaultVal) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '';
+  symbols.forEach(s => {
+    sel.innerHTML += `<option value="${s}"${s === defaultVal ? ' selected' : ''}>${s}</option>`;
+  });
+}
 
-    let smas = [];
-    if (showSMA20) smas.push(20);
-    if (showSMA50) smas.push(50);
+// ─── UTILITIES ───
+function riskClass(cat) {
+  if (!cat) return '';
+  const c = cat.toLowerCase();
+  if (c.includes('conserv')) return 'risk-conservative';
+  if (c.includes('moder')) return 'risk-moderate';
+  if (c.includes('agres') || c.includes('aggress')) return 'risk-aggressive';
+  return '';
+}
 
-    try {
-        const res = await fetch(`/api/candlestick?symbol=${symbol}&smas=${smas.join(',')}&limit=252`);
-        const data = await res.json();
+function badgeHTML(cat) {
+  if (!cat) return '';
+  const c = cat.toLowerCase();
+  if (c.includes('conserv')) return '<span class="badge badge-conservative">Conservador</span>';
+  if (c.includes('moder')) return '<span class="badge badge-moderate">Moderado</span>';
+  if (c.includes('agres') || c.includes('aggress')) return '<span class="badge badge-aggressive">Agresivo</span>';
+  return cat;
+}
 
-        if (candleChart) candleChart.destroy();
+function complexityBadge(comp) {
+  const map = {
+    'O(1)': 'complexity-O1', 'O(n)': 'complexity-On', 'O(nk)': 'complexity-Onk',
+    'O(n log n)': 'complexity-Onlogn', 'O(n^2)': 'complexity-On2',
+    'O(log^2 n)': 'complexity-Olog2n', 'O(log n)': 'complexity-Onlogn',
+    'O(n×m)': 'complexity-On2', 'O(nk)': 'complexity-Onk',
+  };
+  const cls = map[comp] || 'complexity-On';
+  return `<span class="complexity-badge ${cls}">${comp}</span>`;
+}
 
-        const ctx = document.getElementById('candleChart');
-        const labels = data.dates;
+function shortNum(n) {
+  if (!n && n !== 0) return '-';
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + 'T';
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return Number(n).toLocaleString();
+}
 
-        const closes = data.ohlc.map(d => d.close);
-        const opens = data.ohlc.map(d => d.open);
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 
-        const datasets = [
-            {
-                label: `${symbol} Close`,
-                data: closes,
-                borderColor: '#6c63ff',
-                backgroundColor: 'rgba(108, 99, 255, 0.1)',
-                borderWidth: 2,
-                pointRadius: 0,
-                tension: 0.1,
-                fill: true,
-                yAxisID: 'y',
-            }
-        ];
+// ─── TAB: RESUMEN ───
+async function loadHero() {
+  const data = await fetchJSON('/api/dashboard/summary');
+  document.getElementById('heroCards').innerHTML = `
+    <div class="stat-card"><div class="value">${data.total_symbols}</div><div class="label">Activos en Portafolio</div></div>
+    <div class="stat-card"><div class="value">${(data.total_records || 0).toLocaleString()}</div><div class="label">Registros Históricos</div></div>
+    <div class="stat-card"><div class="value">${data.date_range ? data.date_range.start.substring(0,4) + ' — ' + data.date_range.end.substring(0,4) : '-'}</div><div class="label">Rango Temporal</div></div>
+    <div class="stat-card"><div class="value">${data.volatility_summary ? data.volatility_summary.average_volatility_pct + '%' : '-'}</div><div class="label">Volatilidad Promedio</div></div>
+  `;
+}
 
-        const colors = { sma_20: '#22c55e', sma_50: '#f59e0b' };
-        Object.keys(data.smas || {}).forEach(key => {
-            const vals = data.smas[key];
-            if (showSMA20 && key === 'sma_20' || showSMA50 && key === 'sma_50') {
-                datasets.push({
-                    label: key.toUpperCase(),
-                    data: vals,
-                    borderColor: colors[key] || '#888',
-                    borderWidth: 1.5,
-                    pointRadius: 0,
-                    tension: 0.2,
-                    fill: false,
-                    yAxisID: 'y',
-                });
-            }
-        });
+async function loadPortfolio() {
+  const [symData, riskData, statsData] = await Promise.all([
+    fetchJSON('/api/similarity/symbols'),
+    fetchJSON('/api/volatility/ranking'),
+    fetchJSON('/api/statistics'),
+  ]);
+  const symbols = symData.symbols || [];
+  const marketMap = symData.market_map || {};
+  const ranking = (riskData.ranking || []).reduce((acc, r) => { acc[r.symbol] = r; return acc; }, {});
+  const perSym = {};
+  if (statsData.dataset) {
+    (statsData.dataset.symbols || []).forEach(s => perSym[s] = statsData.dataset.per_symbol && statsData.dataset.per_symbol[s] ? statsData.dataset.per_symbol[s].records : '?');
+  }
 
-        candleChart = new Chart(ctx, {
-            type: 'line',
-            data: { labels, datasets },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { intersect: false, mode: 'index' },
-                plugins: {
-                    legend: { position: 'top' },
-                    title: { display: true, text: `${symbol} — Precio de Cierre y Medias Móviles` },
-                },
-                scales: {
-                    x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } },
-                    y: { beginAtZero: false, ticks: { font: { size: 11 } } },
-                },
-            },
-        });
-    } catch(e) { showError('candleChart', 'Error al cargar candlestick'); }
+  let html = `<tr><th>Símbolo</th><th>Mercado</th><th>Tipo</th><th>Categoría Riesgo</th><th>Volatilidad Anual</th><th>σ Diaria</th><th>Retorno Medio</th></tr>`;
+  symbols.forEach(s => {
+    const r = ranking[s] || {};
+    const market = marketMap[s] || '-';
+    const type = market === 'bvc' ? 'Acción' : 'ETF';
+    const mktLabel = market === 'bvc' ? 'BVC' : 'NYSE';
+    html += `<tr>
+      <td><strong>${s}</strong></td>
+      <td>${mktLabel}</td>
+      <td>${type}</td>
+      <td>${badgeHTML(r.risk_category)}</td>
+      <td class="${riskClass(r.risk_category)}">${r.annualized_volatility_pct != null ? r.annualized_volatility_pct.toFixed(2) + '%' : '-'}</td>
+      <td>${r.daily_std != null ? (r.daily_std * 100).toFixed(3) + '%' : '-'}</td>
+      <td>${r.mean_daily_return_pct != null ? r.mean_daily_return_pct.toFixed(3) + '%' : '-'}</td>
+    </tr>`;
+  });
+  document.getElementById('portfolioTable').innerHTML = html;
+}
+
+async function loadETL() {
+  const data = await fetchJSON('/api/etl/cleaning-stats');
+  const prov = data.providers || {};
+  const qual = data.quality || {};
+
+  document.getElementById('providerDesc').textContent = 'Sistema Multi-Source con fallback automático. Prueba 5 proveedores en secuencia hasta obtener datos.';
+
+  const providers = prov.available || [];
+  const chainHtml = providers.map((p, i) => `
+    <div class="provider-step"><span class="step-num">${i + 1}</span>${p}</div>
+    ${i < providers.length - 1 ? '<span class="provider-arrow">→</span>' : ''}
+  `).join('');
+  document.getElementById('providerChain').innerHTML = chainHtml;
+
+  const nullPct = qual.nulls_percentage || {};
+  document.getElementById('dataQuality').innerHTML = `
+    <div class="info-item"><span class="label">Registros totales</span><span class="value">${(qual.total_records || 0).toLocaleString()}</span></div>
+    <div class="info-item"><span class="label">Símbolos únicos</span><span class="value">${qual.unique_symbols || 0}</span></div>
+    <div class="info-item"><span class="label">Días de trading</span><span class="value">${(qual.trading_days || 0).toLocaleString()}</span></div>
+    <div class="info-item"><span class="label">Rango fechas</span><span class="value">${qual.date_range ? qual.date_range.start + ' — ' + qual.date_range.end : '-'}</span></div>
+    <div class="info-item"><span class="label">Símbolos BVC</span><span class="value">${qual.symbols_bvc || 0}</span></div>
+    <div class="info-item"><span class="label">Símbolos NYSE</span><span class="value">${qual.symbols_nyse || 0}</span></div>
+    <div class="info-item"><span class="label">Nulos Open</span><span class="value">${nullPct.open != null ? nullPct.open + '%' : '-'}</span></div>
+    <div class="info-item"><span class="label">Nulos Close</span><span class="value">${nullPct.close != null ? nullPct.close + '%' : '-'}</span></div>
+    <div class="info-item"><span class="label">Nulos High</span><span class="value">${nullPct.high != null ? nullPct.high + '%' : '-'}</span></div>
+    <div class="info-item"><span class="label">Nulos Low</span><span class="value">${nullPct.low != null ? nullPct.low + '%' : '-'}</span></div>
+    <div class="info-item"><span class="label">Nulos Volume</span><span class="value">${nullPct.volume != null ? nullPct.volume + '%' : '-'}</span></div>
+  `;
+
+  const perSym = data.per_symbol || {};
+  const symKeys = Object.keys(perSym).sort();
+  let shtml = `<tr><th>Símbolo</th><th>Registros</th><th>Días Trading</th><th>Nulos Close</th><th>Desde</th><th>Hasta</th></tr>`;
+  symKeys.forEach(s => {
+    const ps = perSym[s];
+    shtml += `<tr>
+      <td><strong>${s}</strong></td>
+      <td>${ps.records}</td>
+      <td>${ps.trading_days}</td>
+      <td>${ps.null_closes > 0 ? '<span style="color:#dc2626;">' + ps.null_closes + '</span>' : '<span style="color:#059669;">0</span>'}</td>
+      <td>${ps.date_from || '-'}</td>
+      <td>${ps.date_to || '-'}</td>
+    </tr>`;
+  });
+  document.getElementById('perSymbolTable').innerHTML = shtml;
+}
+
+// ─── TAB: CORRELACIÓN ───
+async function loadCorrelation() {
+  const data = await fetchJSON('/api/correlation-matrix');
+  const syms = data.symbols || [];
+  const mat = data.matrix || [];
+  const summary = await fetchJSON('/api/dashboard/summary');
+  const corr = summary.correlation || {};
+
+  document.getElementById('corrHeroCards').innerHTML = `
+    <div class="stat-card stat-card-accent"><div class="value">${syms.length}</div><div class="label">Activos</div></div>
+    <div class="stat-card stat-card-accent"><div class="value">${corr.highest ? corr.highest.pair : '-'}</div><div class="label">Mayor Correlación (${corr.highest ? corr.highest.value : ''})</div></div>
+    <div class="stat-card stat-card-accent"><div class="value">${corr.lowest ? corr.lowest.pair : '-'}</div><div class="label">Menor Correlación (${corr.lowest ? corr.lowest.value : ''})</div></div>
+  `;
+
+  let html = '<tr><th style="min-width:60px;">Activo</th>';
+  syms.forEach(s => { html += `<th style="min-width:50px;">${s}</th>`; });
+  html += '</tr>';
+
+  syms.forEach((sym, i) => {
+    html += `<tr><td><strong>${sym}</strong></td>`;
+    mat[i].forEach(val => {
+      const absVal = Math.min(Math.abs(val), 1);
+      let color;
+      if (val > 0) color = `rgba(37, 99, 235, ${0.1 + absVal * 0.7})`;
+      else if (val < 0) color = `rgba(220, 38, 38, ${0.1 + absVal * 0.7})`;
+      else color = '#f3f4f6';
+      const textColor = absVal > 0.6 ? '#fff' : '#1a1a2e';
+      html += `<td style="background:${color}; color:${textColor}; text-align:center; font-weight:${absVal > 0.7 ? 'bold' : 'normal'};">${val.toFixed(2)}</td>`;
+    });
+    html += '</tr>';
+  });
+  document.getElementById('correlationTable').innerHTML = html;
+}
+
+// ─── TAB: RIESGO ───
+let riskChartInstances = {};
+
+async function loadRisk() {
+  const data = await fetchJSON('/api/volatility/ranking');
+  const ranking = data.ranking || [];
+  const summary = data.summary || {};
+  const cats = summary.categories || {};
+
+  document.getElementById('riskHeroCards').innerHTML = `
+    <div class="stat-card"><div class="value">${summary.total_symbols || 0}</div><div class="label">Activos Clasificados</div></div>
+    <div class="stat-card"><div class="value">${summary.average_volatility_pct != null ? summary.average_volatility_pct.toFixed(2) + '%' : '-'}</div><div class="label">Volatilidad Promedio</div></div>
+    <div class="stat-card" style="border-top:3px solid #059669;"><div class="value">${cats.conservador || 0}</div><div class="label">Conservadores</div></div>
+    <div class="stat-card" style="border-top:3px solid #d97706;"><div class="value">${cats.moderado || 0}</div><div class="label">Moderados</div></div>
+  `;
+
+  // Doughnut chart
+  const doughnutLabels = ['Conservador', 'Moderado', 'Agresivo'];
+  const doughnutData = [cats.conservador || 0, cats.moderado || 0, cats.agresivo || 0];
+  const doughnutColors = ['#059669', '#d97706', '#dc2626'];
+  const ctx1 = document.getElementById('riskDoughnutChart');
+  if (ctx1) {
+    if (riskChartInstances.doughnut) riskChartInstances.doughnut.destroy();
+    riskChartInstances.doughnut = new Chart(ctx1, {
+      type: 'doughnut',
+      data: { labels: doughnutLabels, datasets: [{ data: doughnutData, backgroundColor: doughnutColors, borderWidth: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  // Bar chart
+  const barLabels = ranking.map(r => r.symbol);
+  const barData = ranking.map(r => r.annualized_volatility_pct != null ? +r.annualized_volatility_pct.toFixed(2) : 0);
+  const barColors = barData.map(v => v < 15 ? '#059669' : v < 30 ? '#d97706' : '#dc2626');
+  const ctx2 = document.getElementById('riskBarChart');
+  if (ctx2) {
+    if (riskChartInstances.bar) riskChartInstances.bar.destroy();
+    riskChartInstances.bar = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels: barLabels,
+        datasets: [{ label: 'Volatilidad Anual (%)', data: barData, backgroundColor: barColors, borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: '%' } } }
+      }
+    });
+  }
+
+  // Ranking table
+  let html = `<tr><th>#</th><th>Símbolo</th><th>Volatilidad Anual</th><th>σ Diaria</th><th>Retorno Medio Diario</th><th>Categoría</th><th>Días</th></tr>`;
+  ranking.forEach((r, i) => {
+    html += `<tr>
+      <td>${i + 1}</td>
+      <td><strong>${r.symbol}</strong></td>
+      <td class="${riskClass(r.risk_category)}">${r.annualized_volatility_pct != null ? r.annualized_volatility_pct.toFixed(2) + '%' : '-'}</td>
+      <td>${r.daily_std != null ? (r.daily_std * 100).toFixed(3) + '%' : '-'}</td>
+      <td>${r.mean_daily_return_pct != null ? r.mean_daily_return_pct.toFixed(3) + '%' : '-'}</td>
+      <td>${badgeHTML(r.risk_category)}</td>
+      <td>${r.n_returns || '-'}</td>
+    </tr>`;
+  });
+  document.getElementById('riskTable').innerHTML = html;
+}
+
+// ─── TAB: SIMILITUD ───
+let simChartInstance = null;
+
+async function loadSymbolSelectors() {
+  const symbols = await getSymbols();
+  if (symbols.length >= 2) {
+    populateSelect('simS1', symbols, symbols[0]);
+    populateSelect('simS2', symbols, symbols.length > 1 ? symbols[1] : symbols[0]);
+    await loadSimilarity();
+  }
+}
+
+async function loadSimilarity() {
+  const s1 = document.getElementById('simS1').value;
+  const s2 = document.getElementById('simS2').value;
+  if (!s1 || !s2 || s1 === s2) return;
+
+  const data = await fetchJSON(`/api/similarity?s1=${s1}&s2=${s2}`);
+
+  // Metric cards
+  const eu = data.euclidean || {};
+  const pe = data.pearson || {};
+  const dt = data.dtw || {};
+  const co = data.cosine || {};
+  document.getElementById('simMetricCards').innerHTML = `
+    <div class="metric-card">
+      <h4>Distancia Euclidiana</h4>
+      <div class="metric-value">${eu.distance != null ? eu.distance.toFixed(6) : '-'}</div>
+      <div class="metric-sub">O(n) — ${data.common_dates || 0} puntos</div>
+    </div>
+    <div class="metric-card">
+      <h4>Correlación de Pearson</h4>
+      <div class="metric-value">${pe.correlation != null ? pe.correlation.toFixed(4) : '-'}</div>
+      <div class="metric-sub">${pe.interpretation ? pe.interpretation.substring(0, 50) + '...' : ''}</div>
+    </div>
+    <div class="metric-card">
+      <h4>DTW</h4>
+      <div class="metric-value">${dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-'}</div>
+      <div class="metric-sub">Path: ${dt.path_length || 0} pasos</div>
+    </div>
+    <div class="metric-card">
+      <h4>Similitud por Coseno</h4>
+      <div class="metric-value">${co.similarity != null ? co.similarity.toFixed(4) : '-'}</div>
+      <div class="metric-sub">Ángulo: ${co.angle_degrees != null ? co.angle_degrees.toFixed(2) + '°' : '-'}</div>
+    </div>
+  `;
+
+  // Price chart
+  const series = data.series || {};
+  const dates = series.dates || [];
+  const prices1 = series[s1] || [];
+  const prices2 = series[s2] || [];
+
+  if (simChartInstance) simChartInstance.destroy();
+  const ctx = document.getElementById('simChart');
+  if (ctx && dates.length) {
+    simChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: dates,
+        datasets: [
+          { label: s1, data: prices1, borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.1)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y' },
+          { label: s2, data: prices2, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y' },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: { legend: { position: 'top' }, title: { display: true, text: `${s1} vs ${s2} — Precios Históricos` } },
+        scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } }, y: { beginAtZero: false } }
+      }
+    });
+  }
+
+  // Detailed table
+  let thtml = `<tr><th>Algoritmo</th><th>Complejidad</th><th>Valor</th><th>Interpretación</th></tr>`;
+  const addRow = (name, complexity, value, interp) => {
+    thtml += `<tr><td><strong>${name}</strong></td><td>${complexityBadge(complexity)}</td><td style="font-weight:600;">${value}</td><td style="font-size:11px; color:#6b7280;">${interp || ''}</td></tr>`;
+  };
+  addRow('Euclidiana', eu.complexity || 'O(n)', eu.distance != null ? eu.distance.toFixed(6) : '-', eu.interpretation);
+  addRow('Pearson', pe.complexity || 'O(n)', pe.correlation != null ? pe.correlation.toFixed(4) : '-', pe.interpretation);
+  addRow('DTW', dt.complexity || 'O(n×m)', dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-', dt.interpretation);
+  addRow('Coseno', co.complexity || 'O(n)', co.similarity != null ? co.similarity.toFixed(4) : '-', co.interpretation);
+  document.getElementById('simTable').innerHTML = thtml;
+}
+
+// ─── TAB: PATRONES ───
+let patChartInstance = null;
+
+async function loadPatSymbols() {
+  const symbols = await getSymbols();
+  populateSelect('patSymbol', symbols, symbols[0]);
+}
+
+document.getElementById('patType').addEventListener('change', function() {
+  document.getElementById('patMinDaysGroup').style.display = this.value === 'consecutive_up' ? '' : 'none';
+  document.getElementById('patThresholdGroup').style.display = this.value === 'gap_up' ? '' : 'none';
+});
+
+async function loadPatterns() {
+  const symbol = document.getElementById('patSymbol').value;
+  const type = document.getElementById('patType').value;
+  const minDays = document.getElementById('patMinDays').value;
+  const threshold = document.getElementById('patThreshold').value / 100;
+
+  let url = `/api/patterns?symbol=${symbol}&pattern=${type}`;
+  if (type === 'consecutive_up') url += `&min_days=${minDays}`;
+  else url += `&threshold=${threshold}`;
+
+  const data = await fetchJSON(url);
+  const container = document.getElementById('patternResults');
+
+  if (data.error) {
+    container.innerHTML = `<div class="card"><p class="text-muted">${data.error}</p></div>`;
+    return;
+  }
+
+  const totalOcc = data.total_occurrences || 0;
+  const byYear = data.by_year || {};
+  const lastOccs = data.last_occurrences || [];
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="pattern-stat">
+        <div class="pattern-stat-item"><div class="num">${totalOcc}</div><div class="desc">Ocurrencias Totales</div></div>
+        <div class="pattern-stat-item"><div class="num">${data.records_analyzed || 0}</div><div class="desc">Registros Analizados</div></div>
+        <div class="pattern-stat-item"><div class="num">${data.years ? data.years.toFixed(1) : '-'}</div><div class="desc">Años de Historia</div></div>
+        ${data.average_gap_pct ? `<div class="pattern-stat-item"><div class="num">${data.average_gap_pct.toFixed(2)}%</div><div class="desc">Gap Promedio</div></div>` : ''}
+        ${data.max_gap_pct ? `<div class="pattern-stat-item"><div class="num">${data.max_gap_pct.toFixed(2)}%</div><div class="desc">Gap Máximo</div></div>` : ''}
+        ${data.min_days ? `<div class="pattern-stat-item"><div class="num">${data.min_days}</div><div class="desc">Días Mínimos</div></div>` : ''}
+      </div>
+      <p class="section-desc">${data.description || data.algorithm || ''}</p>
+    </div>
+    <div class="card">
+      <h2>Frecuencia por Año</h2>
+      <div class="chart-container-sm"><canvas id="patChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Últimas Ocurrencias</h2>
+      <div class="table-scroll">
+        <table>
+          <tr><th>#</th><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Días</th><th>Cambio %</th></tr>
+          ${lastOccs.length ? lastOccs.slice(0, 10).map((o, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${o.date || o.fecha || '-'}</td>
+              <td>${o.start_date || o.inicio || '-'}</td>
+              <td>${o.end_date || o.fin || '-'}</td>
+              <td>${o.duration || o.dias || o.count || '-'}</td>
+              <td>${o.change_pct || o.cambio || o.gap_pct ? (o.change_pct || o.cambio || o.gap_pct) : '-'}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="6" class="text-muted text-center">Sin ocurrencias</td></tr>'}
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Year bar chart
+  const yearLabels = Object.keys(byYear).sort();
+  const yearData = yearLabels.map(y => byYear[y]);
+  if (patChartInstance) patChartInstance.destroy();
+  const ctx = document.getElementById('patChart');
+  if (ctx && yearLabels.length) {
+    patChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: yearLabels, datasets: [{ label: 'Ocurrencias', data: yearData, backgroundColor: '#6c63ff', borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+  }
+}
+
+// ─── TAB: TÉCNICO ───
+let techChartInstance = null;
+let volumeChartInstance = null;
+
+async function loadTechSelectors() {
+  const symbols = await getSymbols();
+  populateSelect('techSymbol', symbols, symbols[0]);
+  populateSelect('pdfSymbol', symbols, symbols[0]);
+  await loadTechnical();
+  await loadTopVolume();
+}
+
+async function loadTechnical() {
+  const symbol = document.getElementById('techSymbol').value;
+  const showSMA20 = document.getElementById('techSma20').checked;
+  const showSMA50 = document.getElementById('techSma50').checked;
+  const limit = parseInt(document.getElementById('techLimit').value) || 0;
+
+  let smas = [];
+  if (showSMA20) smas.push(20);
+  if (showSMA50) smas.push(50);
+
+  const data = await fetchJSON(`/api/candlestick?symbol=${symbol}&smas=${smas.join(',')}${limit ? '&limit=' + limit : ''}`);
+
+  const dates = data.dates || [];
+  const closes = data.ohlc ? data.ohlc.map(d => d.close) : [];
+
+  // Price chart
+  if (techChartInstance) techChartInstance.destroy();
+  const ctx1 = document.getElementById('techChart');
+  if (ctx1) {
+    const datasets = [{
+      label: `${symbol} Close`,
+      data: closes,
+      borderColor: '#6c63ff',
+      backgroundColor: 'rgba(108, 99, 255, 0.1)',
+      borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y',
+    }];
+    const colors = { sma_20: '#22c55e', sma_50: '#f59e0b' };
+    Object.keys(data.smas || {}).forEach(key => {
+      datasets.push({
+        label: key.toUpperCase(),
+        data: data.smas[key],
+        borderColor: colors[key] || '#888',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y',
+      });
+    });
+
+    techChartInstance = new Chart(ctx1, {
+      type: 'line',
+      data: { labels: dates, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: { legend: { position: 'top' }, title: { display: true, text: `${symbol} — Precio y Medias Móviles` } },
+        scales: { x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } }, y: { beginAtZero: false } }
+      }
+    });
+  }
+
+  // Volume chart
+  const volumes = data.ohlc ? data.ohlc.map(d => d.volume) : [];
+  if (volumeChartInstance) volumeChartInstance.destroy();
+  const ctx2 = document.getElementById('volumeChart');
+  if (ctx2) {
+    volumeChartInstance = new Chart(ctx2, {
+      type: 'bar',
+      data: { labels: dates, datasets: [{ label: 'Volumen', data: volumes, backgroundColor: 'rgba(108,99,255,0.5)', borderRadius: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, title: { display: true, text: 'Volumen Diario' } },
+        scales: { x: { ticks: { maxTicksLimit: 10 } }, y: { beginAtZero: true, ticks: { callback: v => shortNum(v) } } }
+      }
+    });
+  }
+}
+
+async function loadTopVolume() {
+  const data = await fetchJSON('/api/volume/top?n=15');
+  const days = data.days || [];
+  let html = `<tr><th>#</th><th>Fecha</th><th>Volumen Total</th></tr>`;
+  days.forEach((d, i) => {
+    html += `<tr><td>${i + 1}</td><td>${d.date}</td><td style="font-weight:600;">${shortNum(d.total_volume)}</td></tr>`;
+  });
+  document.getElementById('topVolumeTable').innerHTML = html;
+}
+
+// ─── TAB: BENCHMARK ───
+let benchChartInstance = null;
+let benchOpsInstance = null;
+
+async function loadBenchmark() {
+  const data = await fetchJSON('/api/sorting/benchmark');
+  const results = data.results || [];
+  const dsSize = data.dataset_size || 0;
+
+  const fastest = results.length ? results[0] : null;
+  const slowest = results.length ? results[results.length - 1] : null;
+
+  document.getElementById('benchHeroCards').innerHTML = `
+    <div class="stat-card"><div class="value">${results.length}</div><div class="label">Algoritmos Evaluados</div></div>
+    <div class="stat-card" style="border-top:3px solid #059669;"><div class="value">${fastest ? fastest.algorithm : '-'}</div><div class="label">Más Rápido (${fastest ? fastest.average_time.toFixed(2) + 'ms' : ''})</div></div>
+    <div class="stat-card" style="border-top:3px solid #dc2626;"><div class="value">${slowest ? slowest.algorithm : '-'}</div><div class="label">Más Lento (${slowest ? slowest.average_time.toFixed(2) + 'ms' : ''})</div></div>
+  `;
+
+  const labels = results.map(r => r.algorithm);
+  const times = results.map(r => +r.average_time.toFixed(2));
+  const comps = results.map(r => r.comparisons || 0);
+  const swaps = results.map(r => r.swaps || 0);
+
+  // Time chart
+  if (benchChartInstance) benchChartInstance.destroy();
+  const ctx1 = document.getElementById('benchChart');
+  if (ctx1) {
+    const maxTime = Math.max(...times);
+    const colors = times.map(t => t < maxTime * 0.1 ? '#059669' : t < maxTime * 0.5 ? '#d97706' : '#dc2626');
+    benchChartInstance = new Chart(ctx1, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Tiempo (ms)', data: times, backgroundColor: colors, borderRadius: 4 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: { legend: { display: false }, title: { display: true, text: `Benchmark — ${dsSize.toLocaleString()} registros` } },
+        scales: { x: { beginAtZero: true, title: { display: true, text: 'Milisegundos (menor es mejor)' } } }
+      }
+    });
+  }
+
+  // Ops chart
+  if (benchOpsInstance) benchOpsInstance.destroy();
+  const ctx2 = document.getElementById('benchOpsChart');
+  if (ctx2 && comps.some(c => c > 0)) {
+    benchOpsInstance = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Comparaciones', data: comps, backgroundColor: 'rgba(108,99,255,0.6)', borderRadius: 3 },
+          { label: 'Swaps', data: swaps, backgroundColor: 'rgba(34,197,94,0.6)', borderRadius: 3 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' }, title: { display: true, text: 'Operaciones por Algoritmo' } },
+        scales: { x: { ticks: { font: { size: 9 } } }, y: { beginAtZero: true } }
+      }
+    });
+  }
+
+  // Detail table
+  let html = `<tr><th>#</th><th>Algoritmo</th><th>Complejidad</th><th>Tiempo (ms)</th><th>Mínimo</th><th>Máximo</th><th>Comparaciones</th><th>Swaps</th></tr>`;
+  results.forEach((r, i) => {
+    html += `<tr>
+      <td>${i + 1}</td>
+      <td><strong>${r.algorithm}</strong></td>
+      <td>${complexityBadge(r.complexity)}</td>
+      <td style="font-weight:600;">${r.average_time.toFixed(2)}</td>
+      <td>${r.min_time != null ? r.min_time.toFixed(2) : '-'}</td>
+      <td>${r.max_time != null ? r.max_time.toFixed(2) : '-'}</td>
+      <td>${r.comparisons != null ? r.comparisons.toLocaleString() : '-'}</td>
+      <td>${r.swaps != null ? r.swaps.toLocaleString() : '-'}</td>
+    </tr>`;
+  });
+  document.getElementById('benchTable').innerHTML = html;
+}
+
+// ─── TAB: EXPORTAR ───
+async function loadPdfSymbols() {
+  if (!document.getElementById('pdfSymbol').options.length) {
+    const symbols = await getSymbols();
+    populateSelect('pdfSymbol', symbols, symbols[0]);
+  }
 }
 
 async function downloadPDF(event) {
-    const symbol = document.getElementById('candleSymbol').value;
-    const btn = event.target;
-    btn.textContent = '⏳ Generando...';
-    btn.disabled = true;
+  const symbol = document.getElementById('pdfSymbol').value;
+  const btn = event.target;
+  btn.textContent = '⏳ Generando...';
+  btn.disabled = true;
 
-    try {
-        const res = await fetch('/api/report/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol }),
-        });
-        if (!res.ok) { alert('Error al generar PDF'); btn.textContent = '📥 Exportar PDF'; btn.disabled = false; return; }
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `reporte_${symbol}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    } catch(e) { alert('Error al generar PDF'); }
-    btn.textContent = '📥 Exportar PDF';
-    btn.disabled = false;
+  try {
+    const res = await fetch('/api/report/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    });
+    if (!res.ok) { alert('Error al generar PDF'); return; }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reporte_${symbol}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch(e) { alert('Error al generar PDF'); }
+  btn.textContent = '📥 Generar PDF';
+  btn.disabled = false;
 }
 
-loadDashboard();
-loadCorrelationMatrix();
-loadCandleSymbols();
+// ─── SMA TOGGLE HOTKEY ───
+document.getElementById('techSymbol')?.addEventListener('change', loadTechnical);
 </script>
 {% endblock %}

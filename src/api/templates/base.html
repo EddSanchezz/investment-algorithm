@@ -15,10 +15,10 @@
         </div>
         <ul class="sidebar-nav">
             <li><a href="/" class="{% if request.path == '/' %}active{% endif %}">Inicio</a></li>
+            <li><a href="/dashboard" class="{% if 'dashboard' in request.path %}active{% endif %}" style="background:#3a3a6a; color:#fff; border-left:3px solid #6c63ff;">📊 Dashboard Integral</a></li>
             <li><a href="/similarity" class="{% if 'similarity' in request.path %}active{% endif %}">Similitud</a></li>
             <li><a href="/patterns" class="{% if 'patterns' in request.path %}active{% endif %}">Patrones</a></li>
             <li><a href="/risk" class="{% if 'risk' in request.path %}active{% endif %}">Riesgo</a></li>
-            <li><a href="/dashboard" class="{% if 'dashboard' in request.path %}active{% endif %}">Dashboard</a></li>
             <li><a href="/api/health" target="_blank">API Docs</a></li>
         </ul>
     </nav>
