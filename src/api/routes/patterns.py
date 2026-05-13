@@ -4,7 +4,6 @@ y análisis de riesgo.
 """
 
 from flask import Blueprint, jsonify, request
-from src.api.gateway import get_records
 from src.services.patterns import PatternAnalyzer, VolatilityAnalyzer
 
 patterns_bp = Blueprint("patterns", __name__)
@@ -35,6 +34,7 @@ def detect_pattern():
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
 
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
@@ -59,6 +59,7 @@ def get_volatility():
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
 
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
@@ -75,6 +76,7 @@ def get_volatility_ranking():
     Ejemplo:
         GET /api/volatility/ranking
     """
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404

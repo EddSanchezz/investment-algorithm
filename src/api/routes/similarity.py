@@ -4,7 +4,6 @@ Rutas de Similitud — API REST para algoritmos de comparación de activos.
 
 from flask import Blueprint, jsonify, request
 from src.services.similarity import SimilarityAnalyzer
-from src.api.gateway import get_records
 from src.etl.unifier import DataUnifier
 
 similarity_bp = Blueprint("similarity", __name__)
@@ -33,6 +32,7 @@ def compare_symbols():
     if not s1 or not s2:
         return jsonify({"error": "Se requieren los parámetros s1 y s2"}), 400
 
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
@@ -48,6 +48,7 @@ def compare_symbols():
 @similarity_bp.route("/api/similarity/symbols", methods=["GET"])
 def list_symbols():
     """Retorna la lista de símbolos disponibles con mercado de origen."""
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"symbols": [], "market_map": {}})
@@ -71,6 +72,7 @@ def correlation_matrix():
     Ejemplo:
         GET /api/correlation-matrix
     """
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404

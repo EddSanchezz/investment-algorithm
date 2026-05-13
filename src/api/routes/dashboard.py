@@ -3,7 +3,6 @@ Rutas del Dashboard — API REST para candlestick, SMA, cleaning stats y datos d
 """
 
 from flask import Blueprint, jsonify, request
-from src.api.gateway import get_records
 from src.services.similarity import SimilarityAnalyzer
 from src.services.reporting.technical import simple_moving_average
 import os
@@ -32,6 +31,7 @@ def get_candlestick():
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
 
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
@@ -85,6 +85,7 @@ def dashboard_summary():
     Incluye: total activos, total registros, rango fechas,
     activo más y menos volátil, mejores correlaciones.
     """
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
@@ -144,6 +145,7 @@ def cleaning_stats():
     - Calidad: nulos por campo, registros por símbolo
     - Cobertura temporal por mercado
     """
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404

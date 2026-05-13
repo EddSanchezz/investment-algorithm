@@ -109,15 +109,6 @@ def get_statistics():
     return jsonify({"dataset": stats, "volume": volume_stats})
 
 
-from src.api.routes.similarity import similarity_bp
-from src.api.routes.patterns import patterns_bp
-from src.api.routes.dashboard import dashboard_bp
-from src.api.routes.reports import reports_bp
-app.register_blueprint(similarity_bp)
-app.register_blueprint(patterns_bp)
-app.register_blueprint(dashboard_bp)
-app.register_blueprint(reports_bp)
-
 # ─── HTML Pages ──────────────────────────────────────────────
 
 @app.route("/")
@@ -148,6 +139,17 @@ def risk_page():
 def dashboard_page():
     """Renderiza el dashboard completo con heatmap, candlestick y exportación PDF."""
     return render_template("pages/dashboard.html")
+
+
+# ─── Blueprint Routes (importados al final para evitar imports circulares) ───
+from src.api.routes.similarity import similarity_bp
+from src.api.routes.patterns import patterns_bp
+from src.api.routes.dashboard import dashboard_bp
+from src.api.routes.reports import reports_bp
+app.register_blueprint(similarity_bp)
+app.register_blueprint(patterns_bp)
+app.register_blueprint(dashboard_bp)
+app.register_blueprint(reports_bp)
 
 
 def create_app():

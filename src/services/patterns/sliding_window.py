@@ -61,6 +61,7 @@ def detect_consecutive_up(
             "dates": [],
             "last_occurrences": [],
             "algorithm": "Ventana deslizante con contador acumulado",
+            "formula": "close[i] > close[i-1] para min_days consecutivos",
             "complexity": "O(n)",
         }
 
@@ -82,6 +83,7 @@ def detect_consecutive_up(
             "dates": [],
             "last_occurrences": [],
             "algorithm": "Ventana deslizante con contador acumulado",
+            "formula": "close[i] > close[i-1] para min_days consecutivos",
             "complexity": "O(n)",
         }
 
@@ -106,6 +108,7 @@ def detect_consecutive_up(
         "min_days": min_days,
         "definition": f"Secuencia de {min_days} días donde el precio de cierre "
                        f"es superior al del día anterior",
+        "formula": "close[i] > close[i-1] para min_days consecutivos",
         "total_occurrences": len(detection_dates),
         "by_year": dict(by_year),
         "dates": detection_dates,
@@ -157,6 +160,7 @@ def detect_gap_up(
             "dates": [],
             "last_occurrences": [],
             "algorithm": "Comparación día contra día anterior",
+            "formula": "open[i] > close[i-1] × (1 + threshold)",
             "complexity": "O(n)",
         }
 
@@ -192,6 +196,7 @@ def detect_gap_up(
         "definition": f"Día donde open > prev_close × (1 + {threshold}) "
                        f"= apertura superior al cierre anterior en al menos "
                        f"{threshold * 100:.0f}%",
+        "formula": "open[i] > close[i-1] × (1 + threshold)",
         "total_occurrences": len(detection_dates),
         "by_year": dict(by_year),
         "dates": detection_dates,

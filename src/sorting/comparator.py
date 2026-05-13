@@ -48,6 +48,20 @@ class SortingComparator:
             "Binary Insertion Sort": "O(n²)",
             "Radix Sort": "O(nk)",
         }
+        self.descriptions = {
+            "TimSort": "Híbrido Merge + Insertion Sort. Ordena sublistas pequeñas con Insertion Sort y las fusiona con Merge Sort.",
+            "Comb Sort": "Mejora de Bubble Sort con gap decreciente. Compara elementos separados por un espacio que se reduce en cada iteración.",
+            "Selection Sort": "Selecciona el mínimo en cada pasada y lo coloca al inicio. Intercambio directo O(n²).",
+            "Tree Sort": "Inserta elementos en un BST y hace recorrido in-order. Buena velocidad pero memoria extra.",
+            "Pigeonhole Sort": "Distribuye elementos en casilleros indexados por valor. Lineal cuando k ≈ n.",
+            "Bucket Sort": "Divide el rango en cubos, ordena cada cubo individualmente y concatena.",
+            "QuickSort": "Divide y vencerás con pivote. Particiona el arreglo y ordena subarreglos recursivamente.",
+            "HeapSort": "Construye un max-heap y extrae repetidamente el máximo. Ordenamiento in-place.",
+            "Bitonic Sort": "Divide secuencia en secuencias bitónicas y las fusiona. Altamente paralelizable.",
+            "Gnome Sort": "Variante de Insertion Sort. Intercambia pares adyacentes retrocediendo cuando encuentra desorden.",
+            "Binary Insertion Sort": "Insertion Sort con búsqueda binaria para localizar la posición de inserción más rápido.",
+            "Radix Sort": "Ordena dígito por dígito (LSD). Lineal para claves de tamaño fijo.",
+        }
 
     def prepare_data(self, records: List[Dict], sort_key: str = "date") -> List[Dict]:
         """
@@ -140,6 +154,7 @@ class SortingComparator:
             results.append(
                 {
                     "algorithm": name,
+                    "description": self.descriptions.get(name, ""),
                     "complexity": self.complexities[name],
                     "size": n,
                     "average_time": stats["average_time"],

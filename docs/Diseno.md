@@ -195,7 +195,7 @@ El `MultiSourceFetcher` (`providers/multi_source.py`) itera sobre los providers,
 
 **Parsing manual:** Cada proveedor parsea la respuesta JSON o HTML a un formato OHLCV unificado: `{date, symbol, open, high, low, close, volume}`.
 
-**20 activos:** 4 acciones colombianas (ECOPETROL.CL, ISA.CL, GEB.CL, NUTRESA.CL) + 16 ETFs internacionales (VOO, VTI, QQQ, SPY, VEA, VWO, BND, EFA, EEM, TLT, IVV, SCHD, DIA, IWM, XLF, XLK).
+**23 activos:** 4 acciones colombianas (ECOPETROL.CL, ISA.CL, GEB.CL, NUTRESA.CL) + 16 ETFs internacionales (VOO, VTI, QQQ, SPY, VEA, VWO, BND, EFA, EEM, TLT, IVV, SCHD, DIA, IWM, XLF, XLK) + 3 acciones NYSE (KO, PFE, PEP).
 
 ### 3.2 Limpieza de Datos
 

@@ -5,7 +5,6 @@ Rutas de Reportes — API REST para generación y descarga de PDF.
 import os
 from datetime import datetime
 from flask import Blueprint, jsonify, request, send_file
-from src.api.gateway import get_records
 from src.services.reporting.pdf_report import PDFReportGenerator
 from src.services.similarity import SimilarityAnalyzer
 from src.services.patterns import VolatilityAnalyzer
@@ -28,6 +27,7 @@ def generate_report():
     Retorna:
         Archivo PDF para descarga
     """
+    from src.api.gateway import get_records
     records = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404

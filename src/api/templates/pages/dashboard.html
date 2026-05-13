@@ -53,6 +53,7 @@
 {# ─── TAB: RIESGO ─── #}
 <div class="tab-content" id="tab-risk">
   <div class="grid-4" id="riskHeroCards"></div>
+  <div class="card formula-card" id="riskFormulaCard" style="margin-top:16px; display:none;"></div>
   <div class="grid-2">
     <div class="card">
       <h2>Distribución de Riesgo</h2>
@@ -86,6 +87,59 @@
     </div>
   </div>
   <div class="grid-2" id="simMetricCards"></div>
+  <div class="card">
+    <h2>Comparación de Enfoques</h2>
+    <p class="section-desc">Cada algoritmo mide la similitud entre series temporales desde una perspectiva matemática diferente. La siguiente tabla resume sus diferencias clave:</p>
+    <div class="table-scroll">
+      <table>
+        <tr>
+          <th>Algoritmo</th>
+          <th>Qué Mide</th>
+          <th>Rango</th>
+          <th>¿Sensible a Magnitud?</th>
+          <th>¿Tolera Desfase?</th>
+          <th>Complejidad</th>
+          <th>Mejor Usar Cuando…</th>
+        </tr>
+        <tr>
+          <td><strong>Euclidiana</strong></td>
+          <td>Distancia punto a punto entre precios normalizados</td>
+          <td>[0, +∞)</td>
+          <td>Sí</td>
+          <td>No</td>
+          <td>O(n)</td>
+          <td>Las series tienen la misma escala y están alineadas temporalmente</td>
+        </tr>
+        <tr>
+          <td><strong>Pearson</strong></td>
+          <td>Correlación lineal (covarianza normalizada por varianzas)</td>
+          <td>[-1, +1]</td>
+          <td>No (normalizada)</td>
+          <td>No</td>
+          <td>O(n)</td>
+          <td>Se busca saber si dos activos se mueven en la misma dirección</td>
+        </tr>
+        <tr>
+          <td><strong>DTW</strong></td>
+          <td>Distancia con warping temporal no lineal</td>
+          <td>[0, +∞)</td>
+          <td>Sí</td>
+          <td><strong>Sí</strong> (warpeo)</td>
+          <td>O(n×m)</td>
+          <td>Las series tienen desplazamientos de fase o diferente velocidad</td>
+        </tr>
+        <tr>
+          <td><strong>Coseno</strong></td>
+          <td>Ángulo entre vectores de retornos diarios</td>
+          <td>[-1, +1]</td>
+          <td>No (solo dirección)</td>
+          <td>No</td>
+          <td>O(n)</td>
+          <td>Importa la dirección de los retornos, no su magnitud</td>
+        </tr>
+      </table>
+    </div>
+  </div>
   <div class="card">
     <h2>Comparación de Precios</h2>
     <div class="chart-container"><canvas id="simChart"></canvas></div>
@@ -459,6 +513,20 @@ async function loadRisk() {
     <div class="stat-card" style="border-top:3px solid #d97706;"><div class="value">${cats.moderado || 0}</div><div class="label">Moderados</div></div>
   `;
 
+  const volFormula = ranking.length ? (ranking[0].formula || '') : '';
+  const formulaCard = document.getElementById('riskFormulaCard');
+  if (volFormula) {
+    formulaCard.style.display = 'block';
+    formulaCard.innerHTML = `
+      <h4 style="margin:0 0 6px 0; font-size:14px;">Fórmula de Volatilidad Anualizada</h4>
+      <div class="metric-formula" style="background:#f3f4f6; padding:10px 14px; border-radius:6px; margin:0 0 6px 0; font-family:'Courier New',monospace; font-size:13px; color:#374151; overflow-x:auto; white-space:nowrap;">${volFormula}</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        ${complexityBadge(data.complexity || 'O(s × n + s log s)')}
+        <span style="font-size:12px; color:#6b7280;">Complejidad del ranking completo del portafolio</span>
+      </div>
+    `;
+  }
+
   // Doughnut chart
   const doughnutLabels = ['Conservador', 'Moderado', 'Agresivo'];
   const doughnutData = [cats.conservador || 0, cats.moderado || 0, cats.agresivo || 0];
@@ -495,7 +563,7 @@ async function loadRisk() {
   }
 
   // Ranking table
-  let html = `<tr><th>#</th><th>Símbolo</th><th>Volatilidad Anual</th><th>σ Diaria</th><th>Retorno Medio Diario</th><th>Categoría</th><th>Días</th></tr>`;
+  let html = `<tr><th>#</th><th>Símbolo</th><th>Volatilidad Anual</th><th>σ Diaria</th><th>Retorno Medio Diario</th><th>Categoría</th><th>Complejidad</th><th>Días</th></tr>`;
   ranking.forEach((r, i) => {
     html += `<tr>
       <td>${i + 1}</td>
@@ -504,6 +572,7 @@ async function loadRisk() {
       <td>${r.daily_std != null ? (r.daily_std * 100).toFixed(3) + '%' : '-'}</td>
       <td>${r.mean_daily_return_pct != null ? r.mean_daily_return_pct.toFixed(3) + '%' : '-'}</td>
       <td>${badgeHTML(r.risk_category)}</td>
+      <td>${complexityBadge(r.complexity)}</td>
       <td>${r.n_returns || '-'}</td>
     </tr>`;
   });
@@ -529,33 +598,29 @@ async function loadSimilarity() {
 
   const data = await fetchJSON(`/api/similarity?s1=${s1}&s2=${s2}`);
 
-  // Metric cards
+  // Metric cards with formulas
   const eu = data.euclidean || {};
   const pe = data.pearson || {};
   const dt = data.dtw || {};
   const co = data.cosine || {};
-  document.getElementById('simMetricCards').innerHTML = `
+  const simAlgs = [
+    { key: 'euclidean', title: eu.description || 'Distancia Euclidiana', val: eu.distance != null ? eu.distance.toFixed(6) : '-', formula: eu.formula || '', complexity: eu.complexity || 'O(n)', interp: eu.interpretation || '', extra: `${data.common_dates || 0} puntos` },
+    { key: 'pearson', title: pe.description || 'Correlación de Pearson', val: pe.correlation != null ? pe.correlation.toFixed(4) : '-', formula: pe.formula || '', complexity: pe.complexity || 'O(n)', interp: pe.interpretation || '', extra: `Cov: ${pe.covariance != null ? pe.covariance.toFixed(6) : '-'}` },
+    { key: 'dtw', title: dt.description || 'DTW', val: dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-', formula: dt.formula || '', complexity: dt.complexity || 'O(n×m)', interp: dt.interpretation || '', extra: `Path: ${dt.path_length || 0} pasos` },
+    { key: 'cosine', title: co.description || 'Similitud por Coseno', val: co.similarity != null ? co.similarity.toFixed(4) : '-', formula: co.formula || '', complexity: co.complexity || 'O(n)', interp: co.interpretation || '', extra: `Ángulo: ${co.angle_degrees != null ? co.angle_degrees.toFixed(2) + '°' : '-'}` },
+  ];
+  document.getElementById('simMetricCards').innerHTML = simAlgs.map(a => `
     <div class="metric-card">
-      <h4>Distancia Euclidiana</h4>
-      <div class="metric-value">${eu.distance != null ? eu.distance.toFixed(6) : '-'}</div>
-      <div class="metric-sub">O(n) — ${data.common_dates || 0} puntos</div>
+      <h4>${a.title}</h4>
+      <div class="metric-value" style="font-size:${a.val.length > 10 ? '16px' : '22px'};">${a.val}</div>
+      <div class="metric-formula" style="background:#f3f4f6; padding:8px 10px; border-radius:6px; margin:8px 0; font-family:'Courier New',monospace; font-size:12px; color:#374151; overflow-x:auto; white-space:nowrap;">${a.formula}</div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+        ${complexityBadge(a.complexity)}
+        <span style="font-size:11px; color:#6b7280;">${a.extra}</span>
+      </div>
+      <div style="margin-top:6px; font-size:11px; color:#6b7280; line-height:1.4;">${a.interp.substring(0, 120)}${a.interp.length > 120 ? '...' : ''}</div>
     </div>
-    <div class="metric-card">
-      <h4>Correlación de Pearson</h4>
-      <div class="metric-value">${pe.correlation != null ? pe.correlation.toFixed(4) : '-'}</div>
-      <div class="metric-sub">${pe.interpretation ? pe.interpretation.substring(0, 50) + '...' : ''}</div>
-    </div>
-    <div class="metric-card">
-      <h4>DTW</h4>
-      <div class="metric-value">${dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-'}</div>
-      <div class="metric-sub">Path: ${dt.path_length || 0} pasos</div>
-    </div>
-    <div class="metric-card">
-      <h4>Similitud por Coseno</h4>
-      <div class="metric-value">${co.similarity != null ? co.similarity.toFixed(4) : '-'}</div>
-      <div class="metric-sub">Ángulo: ${co.angle_degrees != null ? co.angle_degrees.toFixed(2) + '°' : '-'}</div>
-    </div>
-  `;
+  `).join('');
 
   // Price chart
   const series = data.series || {};
@@ -641,7 +706,11 @@ async function loadPatterns() {
         ${data.max_gap_pct ? `<div class="pattern-stat-item"><div class="num">${data.max_gap_pct.toFixed(2)}%</div><div class="desc">Gap Máximo</div></div>` : ''}
         ${data.min_days ? `<div class="pattern-stat-item"><div class="num">${data.min_days}</div><div class="desc">Días Mínimos</div></div>` : ''}
       </div>
-      <p class="section-desc">${data.description || data.algorithm || ''}</p>
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+        ${complexityBadge(data.complexity)}
+        ${data.formula ? `<span class="badge badge-formula" style="background:#e0e7ff; color:#4338ca; font-size:11px; padding:4px 10px; border-radius:12px; font-family:'Courier New',monospace;">${data.formula}</span>` : ''}
+      </div>
+      <p class="section-desc" style="margin-top:8px;">${data.definition || data.algorithm || ''}</p>
     </div>
     <div class="card">
       <h2>Frecuencia por Año</h2>
@@ -682,8 +751,116 @@ async function loadPatterns() {
 }
 
 // ─── TAB: TÉCNICO ───
-let techChartInstance = null;
 let volumeChartInstance = null;
+
+function renderCandlestickChart(canvasId, ohlc, dates, smas, title) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !ohlc || ohlc.length < 2) return;
+  const parent = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const w = parent.clientWidth || 600;
+  const h = 400;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const m = { top: 40, right: 20, bottom: 50, left: 65 };
+  const pw = w - m.left - m.right;
+  const ph = h - m.top - m.bottom;
+
+  let minP = Infinity, maxP = -Infinity;
+  ohlc.forEach(d => { if (d.low < minP) minP = d.low; if (d.high > maxP) maxP = d.high; });
+  Object.values(smas || {}).forEach(arr => arr.forEach(v => { if (v != null) { if (v < minP) minP = v; if (v > maxP) maxP = v; } }));
+  const pad = (maxP - minP) * 0.05 || 1;
+  minP -= pad; maxP += pad;
+
+  const toX = i => m.left + (i / (ohlc.length - 1)) * pw;
+  const toY = v => m.top + (1 - (v - minP) / (maxP - minP)) * ph;
+  const n = ohlc.length;
+  const candleW = Math.max(1, pw / n * 0.6);
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#1a1a2e';
+  ctx.font = 'bold 14px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, w / 2, 22);
+
+  // Grid lines
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 0.5;
+  const nYTicks = 6;
+  for (let i = 0; i <= nYTicks; i++) {
+    const y = m.top + (i / nYTicks) * ph;
+    ctx.beginPath(); ctx.moveTo(m.left, y); ctx.lineTo(w - m.right, y); ctx.stroke();
+  }
+
+  // Y-axis labels
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= nYTicks; i++) {
+    const v = maxP - (i / nYTicks) * (maxP - minP);
+    ctx.fillText(v.toFixed(2), m.left - 8, m.top + (i / nYTicks) * ph);
+  }
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const xStep = Math.max(1, Math.floor(n / 10));
+  for (let i = 0; i < n; i += xStep) {
+    const label = dates[i] ? dates[i].substring(0, 7) : '';
+    ctx.fillText(label, toX(i), h - m.bottom + 8);
+  }
+
+  // Candlesticks
+  for (let i = 0; i < n; i++) {
+    const d = ohlc[i];
+    const x = toX(i);
+    const isUp = d.close >= d.open;
+    ctx.strokeStyle = isUp ? '#22c55e' : '#dc2626';
+    ctx.fillStyle = isUp ? '#22c55e' : '#dc2626';
+    // Wick
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, toY(d.high)); ctx.lineTo(x, toY(d.low)); ctx.stroke();
+    // Body
+    const bodyTop = toY(Math.max(d.open, d.close));
+    const bodyBot = toY(Math.min(d.open, d.close));
+    const bodyH = Math.max(1, bodyBot - bodyTop);
+    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+  }
+
+  // SMAs
+  const smaColors = { sma_20: '#2563eb', sma_50: '#f59e0b' };
+  Object.keys(smas || {}).forEach(key => {
+    const arr = smas[key];
+    ctx.strokeStyle = smaColors[key] || '#888';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < n; i++) {
+      if (arr[i] != null) {
+        const y = toY(arr[i]);
+        if (!started) { ctx.moveTo(toX(i), y); started = true; }
+        else ctx.lineTo(toX(i), y);
+      }
+    }
+    ctx.stroke();
+
+    // Label at end
+    const lastIdx = n - 1;
+    if (arr[lastIdx] != null) {
+      ctx.fillStyle = smaColors[key] || '#888';
+      ctx.font = 'bold 11px -apple-system, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(key.toUpperCase(), toX(lastIdx) + 4, toY(arr[lastIdx]));
+    }
+  });
+}
 
 async function loadTechSelectors() {
   const symbols = await getSymbols();
@@ -706,43 +883,13 @@ async function loadTechnical() {
   const data = await fetchJSON(`/api/candlestick?symbol=${symbol}&smas=${smas.join(',')}${limit ? '&limit=' + limit : ''}`);
 
   const dates = data.dates || [];
-  const closes = data.ohlc ? data.ohlc.map(d => d.close) : [];
+  const ohlc = data.ohlc || [];
 
-  // Price chart
-  if (techChartInstance) techChartInstance.destroy();
-  const ctx1 = document.getElementById('techChart');
-  if (ctx1) {
-    const datasets = [{
-      label: `${symbol} Close`,
-      data: closes,
-      borderColor: '#6c63ff',
-      backgroundColor: 'rgba(108, 99, 255, 0.1)',
-      borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y',
-    }];
-    const colors = { sma_20: '#22c55e', sma_50: '#f59e0b' };
-    Object.keys(data.smas || {}).forEach(key => {
-      datasets.push({
-        label: key.toUpperCase(),
-        data: data.smas[key],
-        borderColor: colors[key] || '#888',
-        borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, yAxisID: 'y',
-      });
-    });
-
-    techChartInstance = new Chart(ctx1, {
-      type: 'line',
-      data: { labels: dates, datasets },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { intersect: false, mode: 'index' },
-        plugins: { legend: { position: 'top' }, title: { display: true, text: `${symbol} — Precio y Medias Móviles` } },
-        scales: { x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } }, y: { beginAtZero: false } }
-      }
-    });
-  }
+  // Candlestick chart
+  renderCandlestickChart('techChart', ohlc, dates, data.smas || {}, `${symbol} — Velas OHLC y Medias Móviles`);
 
   // Volume chart
-  const volumes = data.ohlc ? data.ohlc.map(d => d.volume) : [];
+  const volumes = ohlc.map(d => d.volume);
   if (volumeChartInstance) volumeChartInstance.destroy();
   const ctx2 = document.getElementById('volumeChart');
   if (ctx2) {
@@ -830,7 +977,7 @@ async function loadBenchmark() {
   }
 
   // Detail table
-  let html = `<tr><th>#</th><th>Algoritmo</th><th>Complejidad</th><th>Tiempo (ms)</th><th>Mínimo</th><th>Máximo</th><th>Comparaciones</th><th>Swaps</th></tr>`;
+  let html = `<tr><th>#</th><th>Algoritmo</th><th>Complejidad</th><th>Tiempo (ms)</th><th>Mínimo</th><th>Máximo</th><th>Comparaciones</th><th>Swaps</th><th>Descripción</th></tr>`;
   results.forEach((r, i) => {
     html += `<tr>
       <td>${i + 1}</td>
@@ -841,6 +988,7 @@ async function loadBenchmark() {
       <td>${r.max_time != null ? r.max_time.toFixed(2) : '-'}</td>
       <td>${r.comparisons != null ? r.comparisons.toLocaleString() : '-'}</td>
       <td>${r.swaps != null ? r.swaps.toLocaleString() : '-'}</td>
+      <td style="font-size:11px; color:#6b7280; max-width:250px; line-height:1.4;">${r.description || ''}</td>
     </tr>`;
   });
   document.getElementById('benchTable').innerHTML = html;

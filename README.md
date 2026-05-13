@@ -12,7 +12,7 @@
 ## Descripción
 
 Sistema de análisis algorítmico de activos financieros que implementa:
-1. **ETL**: Extracción HTTP directa de Yahoo Finance (20 activos, 5+ años)
+1. **ETL**: Extracción HTTP directa de Yahoo Finance (23 activos, 5+ años)
 2. **Similitud**: 4 algoritmos (Euclidiana, Pearson, DTW, Coseno)
 3. **Patrones**: Ventana deslizante (días al alza, Gap Up)
 4. **Volatilidad**: Clasificación de riesgo (Conservador/Moderado/Agresivo)
@@ -50,7 +50,7 @@ src/
 └── tests/                      # 47 tests unitarios
 ```
 
-## Activos Financieros (20)
+## Activos Financieros (23)
 
 ### Acciones Colombianas (4)
 | Símbolo | Nombre |
@@ -62,6 +62,9 @@ src/
 
 ### ETFs Internacionales (16)
 VOO, VTI, QQQ, SPY, VEA, VWO, BND, EFA, EEM, TLT, IVV, SCHD, DIA, IWM, XLF, XLK
+
+### Acciones NYSE (3)
+KO, PFE, PEP
 
 ## Ejecución
 

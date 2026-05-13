@@ -37,6 +37,8 @@ class InvestmentPipeline:
         "xlk",
     ]
 
+    NYSE_STOCKS = ["ko", "pfe", "pep"]
+
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
         self.raw_dir = os.path.join(data_dir, "raw")
@@ -66,7 +68,7 @@ class InvestmentPipeline:
         Complejidad: O(n*d) para descarga + O(n) para limpieza + O(n log n) para unificación
         """
         if symbols is None:
-            symbols = self.COLOMBIAN_STOCKS + self.INTERNATIONAL_ETFS
+            symbols = self.COLOMBIAN_STOCKS + self.INTERNATIONAL_ETFS + self.NYSE_STOCKS
 
         print(f"\n{'=' * 60}")
         print("ETAPA 1: Extracción de datos")
