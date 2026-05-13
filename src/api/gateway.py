@@ -161,8 +161,16 @@ def dashboard_page():
     return render_template("pages/dashboard.html")
 
 
-def create_app():
-    """Retorna la instancia de la aplicación Flask para uso externo (ej. gunicorn)."""
+def create_app(environ=None, start_response=None):
+    """
+    Retorna la instancia Flask o actúa como WSGI callable.
+
+    Gunicorn permite cargar fábricas con ``module:create_app()``, pero si se
+    configura como ``module:create_app`` llama a la función con la firma WSGI.
+    Este puente conserva ambos modos para despliegues existentes.
+    """
+    if environ is not None and start_response is not None:
+        return app(environ, start_response)
     return app
 
 

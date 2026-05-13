@@ -17,6 +17,20 @@ def client():
         yield client
 
 
+def test_create_app_accepts_wsgi_call_signature():
+    from werkzeug.test import EnvironBuilder
+    from src.api.gateway import create_app
+
+    environ = EnvironBuilder(path="/", method="HEAD").get_environ()
+    status = []
+
+    response = create_app(environ, lambda value, _headers, _exc_info=None: status.append(value))
+    if hasattr(response, "close"):
+        response.close()
+
+    assert status[0].startswith("200")
+
+
 class TestHealthEndpoint:
     def test_health_returns_200(self, client):
         resp = client.get("/api/health")
