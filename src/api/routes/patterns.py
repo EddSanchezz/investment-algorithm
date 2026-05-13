@@ -13,10 +13,10 @@ Complejidad:
     /api/volatility/ranking    O(s × n + s log s) — s = símbolos, n = registros
 """
 
-from typing import List, Dict
 from flask import Blueprint, jsonify, request
-from src.services.patterns import PatternAnalyzer, VolatilityAnalyzer
+
 from src.api.data import get_records
+from src.services.patterns import PatternAnalyzer, VolatilityAnalyzer
 
 patterns_bp = Blueprint("patterns", __name__)
 pattern_analyzer: PatternAnalyzer = PatternAnalyzer()
@@ -30,9 +30,10 @@ def detect_pattern():
 
     Parámetros query:
         symbol (str): Símbolo del activo
-        pattern (str): Tipo de patrón ("consecutive_up" o "gap_up")
-        min_days (int): Días consecutivos (default: 3, solo consecutive_up)
-        threshold (float): Umbral de gap (default: 0.02, solo gap_up)
+        pattern (str): Tipo de patrón
+        min_days (int): Días consecutivos (para patrones de racha)
+        threshold (float): Umbral de gap (para gap_up/gap_down)
+        window (int): Ventana de lookback (para breakout_up/breakout_down)
 
     Ejemplo:
         GET /api/patterns?symbol=VOO&pattern=consecutive_up&min_days=3
@@ -42,6 +43,7 @@ def detect_pattern():
     pattern: str = request.args.get("pattern", "consecutive_up")
     min_days: int = request.args.get("min_days", 3, type=int)
     threshold: float = request.args.get("threshold", 0.02, type=float)
+    window: int = request.args.get("window", 20, type=int)
 
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
@@ -50,7 +52,7 @@ def detect_pattern():
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
 
-    result: dict = pattern_analyzer.analyze(records, symbol, pattern, min_days, threshold)
+    result: dict = pattern_analyzer.analyze(records, symbol, pattern, min_days, threshold, window)
     return jsonify(result)
 
 

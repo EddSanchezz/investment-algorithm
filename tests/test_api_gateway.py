@@ -104,11 +104,21 @@ class TestBlueprintRoutes:
         resp = client.get("/api/similarity/symbols")
         assert resp.status_code == 200
 
+    def test_similarity_group_missing_symbols(self, client):
+        resp = client.get("/api/similarity/group")
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "error" in data
+
     def test_patterns_blueprint_missing_param(self, client):
         resp = client.get("/api/patterns")
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
+
+    def test_patterns_blueprint_new_pattern(self, client):
+        resp = client.get("/api/patterns?symbol=VOO&pattern=breakout_up&window=20")
+        assert resp.status_code in (200, 404)
 
     def test_risk_blueprint_ranking(self, client):
         resp = client.get("/api/volatility/ranking")

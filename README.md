@@ -12,11 +12,11 @@
 ## Descripción
 
 Sistema de análisis algorítmico de activos financieros que implementa:
-1. **ETL**: Extracción HTTP directa de Yahoo Finance (23 activos, 5+ años)
-2. **Similitud**: 4 algoritmos (Euclidiana, Pearson, DTW, Coseno)
-3. **Patrones**: Ventana deslizante (días al alza, Gap Up)
+1. **ETL**: Extracción multi-fuente HTTP (Tiingo, Yahoo, Alpha Vantage, Scraper, Binance) para 23 activos y 5+ años
+2. **Similitud**: 4 algoritmos (Euclidiana, Pearson, DTW, Coseno) con comparación de pares y grupos
+3. **Patrones**: Ventana deslizante (alza, baja, gaps y breakouts)
 4. **Volatilidad**: Clasificación de riesgo (Conservador/Moderado/Agresivo)
-5. **Dashboard**: Heatmap de correlación, candlestick con SMA, reporte PDF
+5. **Dashboard**: Heatmap de correlación, candlestick con SMA, fórmulas matemáticas renderizadas y reporte PDF
 6. **API REST**: Flask con frontend Chart.js
 
 ## Documentación
@@ -91,6 +91,8 @@ python -m src.services.main_runner
 python -m src.api.gateway
 ```
 
+En Linux/macOS se recomienda esta ruta directa con Python mientras el `Taskfile` siga orientado a Windows.
+
 ## Opciones
 
 | Comando | Descripción |
@@ -107,8 +109,9 @@ python -m src.api.gateway
 |--------|------|-------------|
 | GET | `/api/health` | Estado del servidor |
 | GET | `/api/similarity?s1=VOO&s2=SPY` | 4 métricas de similitud |
+| GET | `/api/similarity/group?symbols=VOO&symbols=SPY&symbols=QQQ` | Comparación multi-activo |
 | GET | `/api/correlation-matrix` | Matriz de correlación |
-| GET | `/api/patterns?symbol=VOO&pattern=consecutive_up` | Patrones |
+| GET | `/api/patterns?symbol=VOO&pattern=breakout_up&window=20` | Patrones |
 | GET | `/api/volatility/ranking` | Ranking de riesgo |
 | GET | `/api/candlestick?symbol=VOO` | OHLC + SMA |
 | POST | `/api/report/generate` | Descargar PDF |

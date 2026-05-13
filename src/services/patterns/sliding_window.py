@@ -2,235 +2,461 @@
 Sliding Window — Detección de patrones en series temporales financieras.
 
 Patrones implementados:
-    1. Días consecutivos al alza (Consecutive Up)
-       Define: secuencia de N días donde close > close anterior
-       Algoritmo: ventana deslizante con contador acumulado O(n)
-
-    2. Gap Up
-       Define: día donde open > prev_close × (1 + umbral)
-       Algoritmo: comparación día contra día anterior O(n)
-
-Ambos patrones se detectan mediante una ventana deslizante que recorre
-el historial de precios una sola vez (O(n)), manteniendo un contador
-del estado actual de la secuencia.
+    1. Días consecutivos al alza
+    2. Días consecutivos a la baja
+    3. Gap Up
+    4. Gap Down
+    5. Breakout alcista
+    6. Breakout bajista
 """
 
-from typing import List, Dict
 from collections import defaultdict
+from datetime import datetime
+from typing import Dict, List
 
 
-def detect_consecutive_up(
-    records: List[Dict], min_days: int = 3
+def _history_years(records: List[Dict]) -> float:
+    dated_records = [r for r in sorted(records, key=lambda x: x["date"]) if r.get("date")]
+    if len(dated_records) < 2:
+        return 0.0
+
+    start = datetime.strptime(dated_records[0]["date"], "%Y-%m-%d")
+    end = datetime.strptime(dated_records[-1]["date"], "%Y-%m-%d")
+    return round((end - start).days / 365.25, 1)
+
+
+def _empty_pattern_result(
+    pattern_name: str,
+    formula: str,
+    algorithm: str,
+    definition: str,
+    **extra,
 ) -> Dict:
-    """
-    Detecta secuencias de días consecutivos al alza usando ventana deslizante.
+    result = {
+        "pattern": pattern_name,
+        "definition": definition,
+        "formula": formula,
+        "total_occurrences": 0,
+        "by_year": {},
+        "dates": [],
+        "occurrences": [],
+        "last_occurrences": [],
+        "algorithm": algorithm,
+        "complexity": "O(n)",
+        "years": 0.0,
+    }
+    result.update(extra)
+    return result
 
-    Algoritmo:
-        1. Inicializar contador = 0
-        2. Para cada día i en la serie:
-           - Si close[i] > close[i-1]: contador++
-           - Si no: contador = 0
-           - Si contador >= min_days: patrón detectado (en día i)
-        3. Retornar fechas de detección + frecuencia por año
 
-    Complejidad: O(n) — una sola pasada con contador acumulado
-    Espacial: O(k) donde k = número de ocurrencias
+def _finalize_pattern_result(
+    pattern_name: str,
+    records: List[Dict],
+    occurrences: List[Dict],
+    definition: str,
+    formula: str,
+    algorithm: str,
+    **extra,
+) -> Dict:
+    by_year: Dict[str, int] = defaultdict(int)
+    for occurrence in occurrences:
+        year = occurrence["date"][:4]
+        by_year[year] += 1
 
-    Parámetros:
-        records: Lista de registros financieros (de un solo símbolo,
-                 ordenados por fecha ascendente)
-        min_days: Número mínimo de días consecutivos al alza (default: 3)
+    return {
+        "pattern": pattern_name,
+        "definition": definition,
+        "formula": formula,
+        "total_occurrences": len(occurrences),
+        "by_year": dict(by_year),
+        "dates": [occurrence["date"] for occurrence in occurrences],
+        "occurrences": occurrences,
+        "last_occurrences": occurrences[-5:],
+        "algorithm": algorithm,
+        "complexity": "O(n)",
+        "years": _history_years(records),
+        **extra,
+    }
 
-    Retorna:
-        Diccionario con:
-            - pattern: nombre del patrón
-            - min_days: días consecutivos requeridos
-            - total_occurrences: número total de ocurrencias
-            - by_year: {año: ocurrencias}
-            - dates: lista de fechas de detección
-            - last_occurrences: últimas 5 fechas de detección
-            - algorithm: descripción del algoritmo
-            - complexity: O(n)
-    """
+
+def _valid_close_records(records: List[Dict]) -> List[Dict]:
+    return [
+        record
+        for record in sorted(records, key=lambda x: x["date"])
+        if record.get("close") is not None
+    ]
+
+
+def detect_consecutive_up(records: List[Dict], min_days: int = 3) -> Dict:
+    formula = "$close_i > close_{i-1}$ durante $k$ sesiones consecutivas"
+    definition = (
+        f"Secuencia de {min_days} incrementos consecutivos donde cada precio de cierre "
+        "es superior al del día hábil anterior."
+    )
+    algorithm = (
+        "Ventana deslizante con contador acumulado:\n"
+        "1. Recorrer la serie una sola vez\n"
+        "2. Incrementar contador si close[i] > close[i-1]\n"
+        "3. Registrar una ocurrencia cuando el contador alcanza el mínimo\n"
+        "4. Reiniciar el contador cuando la racha se rompe"
+    )
     if len(records) < min_days + 1:
-        return {
-            "pattern": "Consecutive Up",
-            "min_days": min_days,
-            "total_occurrences": 0,
-            "by_year": {},
-            "dates": [],
-            "last_occurrences": [],
-            "algorithm": "Ventana deslizante con contador acumulado",
-            "formula": "close[i] > close[i-1] para min_days consecutivos",
-            "complexity": "O(n)",
-        }
+        return _empty_pattern_result(
+            "Consecutive Up",
+            formula,
+            algorithm,
+            definition,
+            min_days=min_days,
+        )
 
-    sorted_records = sorted(records, key=lambda x: x["date"])
-    prices = []
-    dates = []
-    for r in sorted_records:
-        c = r.get("close")
-        if c is not None:
-            prices.append(c)
-            dates.append(r["date"])
+    sorted_records = _valid_close_records(records)
+    if len(sorted_records) < min_days + 1:
+        return _empty_pattern_result(
+            "Consecutive Up",
+            formula,
+            algorithm,
+            definition,
+            min_days=min_days,
+        )
 
-    if len(prices) < min_days + 1:
-        return {
-            "pattern": "Consecutive Up",
-            "min_days": min_days,
-            "total_occurrences": 0,
-            "by_year": {},
-            "dates": [],
-            "last_occurrences": [],
-            "algorithm": "Ventana deslizante con contador acumulado",
-            "formula": "close[i] > close[i-1] para min_days consecutivos",
-            "complexity": "O(n)",
-        }
-
+    occurrences = []
     counter = 0
-    detection_dates = []
 
-    for i in range(1, len(prices)):
-        if prices[i] > prices[i - 1]:
+    for index in range(1, len(sorted_records)):
+        current_close = sorted_records[index]["close"]
+        previous_close = sorted_records[index - 1]["close"]
+        if current_close > previous_close:
             counter += 1
             if counter >= min_days:
-                detection_dates.append(dates[i])
+                start_index = index - counter
+                start_close = sorted_records[start_index]["close"]
+                change_pct = round(((current_close / start_close) - 1) * 100, 2)
+                occurrences.append(
+                    {
+                        "date": sorted_records[index]["date"],
+                        "start_date": sorted_records[start_index]["date"],
+                        "end_date": sorted_records[index]["date"],
+                        "duration": counter + 1,
+                        "change_pct": change_pct,
+                    }
+                )
         else:
             counter = 0
 
-    by_year: Dict[str, int] = defaultdict(int)
-    for d in detection_dates:
-        year = d[:4]
-        by_year[year] += 1
-
-    return {
-        "pattern": "Consecutive Up",
-        "min_days": min_days,
-        "definition": f"Secuencia de {min_days} días donde el precio de cierre "
-                       f"es superior al del día anterior",
-        "formula": "close[i] > close[i-1] para min_days consecutivos",
-        "total_occurrences": len(detection_dates),
-        "by_year": dict(by_year),
-        "dates": detection_dates,
-        "last_occurrences": detection_dates[-5:] if detection_dates else [],
-        "algorithm": (
-            "Ventana deslizante con contador acumulado:\n"
-            "1. Inicializar contador = 0\n"
-            "2. Por cada día i: si close[i] > close[i-1], contador++\n"
-            "3. Si contador alcanza min_days, registrar detección\n"
-            "4. Si la secuencia se rompe, reiniciar contador = 0\n"
-            "Complejidad: O(n) — una sola pasada"
-        ),
-        "complexity": "O(n)",
-    }
+    return _finalize_pattern_result(
+        "Consecutive Up",
+        sorted_records,
+        occurrences,
+        definition,
+        formula,
+        algorithm,
+        min_days=min_days,
+    )
 
 
-def detect_gap_up(
-    records: List[Dict], threshold: float = 0.02
-) -> Dict:
-    """
-    Detecta patrones de Gap Up usando ventana deslizante.
+def detect_consecutive_down(records: List[Dict], min_days: int = 3) -> Dict:
+    formula = "$close_i < close_{i-1}$ durante $k$ sesiones consecutivas"
+    definition = (
+        f"Secuencia de {min_days} caídas consecutivas donde cada precio de cierre "
+        "es inferior al del día hábil anterior."
+    )
+    algorithm = (
+        "Ventana deslizante con contador acumulado sobre cierres decrecientes."
+    )
+    if len(records) < min_days + 1:
+        return _empty_pattern_result(
+            "Consecutive Down",
+            formula,
+            algorithm,
+            definition,
+            min_days=min_days,
+        )
 
-    Un Gap Up ocurre cuando el precio de apertura es significativamente
-    superior al precio de cierre del día anterior:
-        open[i] > prev_close[i-1] × (1 + threshold)
+    sorted_records = _valid_close_records(records)
+    if len(sorted_records) < min_days + 1:
+        return _empty_pattern_result(
+            "Consecutive Down",
+            formula,
+            algorithm,
+            definition,
+            min_days=min_days,
+        )
 
-    Algoritmo:
-        1. Para cada día i (desde i=1):
-           - Calcular ratio = open[i] / close[i-1]
-           - Si ratio > 1 + threshold: Gap Up detectado
-        2. Retornar fechas + estadísticas
+    occurrences = []
+    counter = 0
 
-    Complejidad: O(n) — una sola pasada
-    Espacial: O(k) donde k = número de ocurrencias
+    for index in range(1, len(sorted_records)):
+        current_close = sorted_records[index]["close"]
+        previous_close = sorted_records[index - 1]["close"]
+        if current_close < previous_close:
+            counter += 1
+            if counter >= min_days:
+                start_index = index - counter
+                start_close = sorted_records[start_index]["close"]
+                change_pct = round(((current_close / start_close) - 1) * 100, 2)
+                occurrences.append(
+                    {
+                        "date": sorted_records[index]["date"],
+                        "start_date": sorted_records[start_index]["date"],
+                        "end_date": sorted_records[index]["date"],
+                        "duration": counter + 1,
+                        "change_pct": change_pct,
+                    }
+                )
+        else:
+            counter = 0
 
-    Parámetros:
-        records: Lista de registros financieros (un solo símbolo, ordenados)
-        threshold: Umbral de gap (default: 0.02 = 2%)
+    return _finalize_pattern_result(
+        "Consecutive Down",
+        sorted_records,
+        occurrences,
+        definition,
+        formula,
+        algorithm,
+        min_days=min_days,
+    )
 
-    Retorna:
-        Diccionario con detecciones, estadísticas y análisis
-    """
+
+def detect_gap_up(records: List[Dict], threshold: float = 0.02) -> Dict:
+    formula = "$open_i > close_{i-1} \\cdot (1 + \\theta)$"
+    definition = (
+        f"Día donde la apertura supera el cierre previo en al menos {threshold * 100:.1f}%"
+    )
+    algorithm = "Comparación día contra día anterior con cálculo directo del tamaño del gap."
     if len(records) < 2:
-        return {
-            "pattern": "Gap Up",
-            "threshold": threshold,
-            "total_occurrences": 0,
-            "by_year": {},
-            "dates": [],
-            "last_occurrences": [],
-            "algorithm": "Comparación día contra día anterior",
-            "formula": "open[i] > close[i-1] × (1 + threshold)",
-            "complexity": "O(n)",
-        }
+        return _empty_pattern_result(
+            "Gap Up",
+            formula,
+            algorithm,
+            definition,
+            threshold=threshold,
+            threshold_pct=threshold * 100,
+            average_gap_pct=0.0,
+            max_gap_pct=0.0,
+        )
 
     sorted_records = sorted(records, key=lambda x: x["date"])
-    detection_dates = []
+    occurrences = []
     gap_sizes = []
 
-    for i in range(1, len(sorted_records)):
-        curr = sorted_records[i]
-        prev = sorted_records[i - 1]
+    for index in range(1, len(sorted_records)):
+        current = sorted_records[index]
+        previous = sorted_records[index - 1]
+        current_open = current.get("open")
+        previous_close = previous.get("close")
+        if current_open is None or previous_close is None or previous_close <= 0:
+            continue
 
-        curr_open = curr.get("open")
-        prev_close = prev.get("close")
+        gap_ratio = (current_open / previous_close) - 1
+        if gap_ratio > threshold:
+            gap_pct = round(gap_ratio * 100, 2)
+            gap_sizes.append(gap_pct)
+            occurrences.append(
+                {
+                    "date": current["date"],
+                    "start_date": previous["date"],
+                    "end_date": current["date"],
+                    "duration": 1,
+                    "gap_pct": gap_pct,
+                    "change_pct": gap_pct,
+                    "reference_close": round(previous_close, 4),
+                    "open_price": round(current_open, 4),
+                }
+            )
 
-        if curr_open is not None and prev_close is not None and prev_close > 0:
-            ratio = curr_open / prev_close
-            if ratio > 1 + threshold:
-                detection_dates.append(curr["date"])
-                gap_sizes.append(round((ratio - 1) * 100, 2))
+    return _finalize_pattern_result(
+        "Gap Up",
+        sorted_records,
+        occurrences,
+        definition,
+        formula,
+        algorithm,
+        threshold=threshold,
+        threshold_pct=threshold * 100,
+        average_gap_pct=round(sum(gap_sizes) / len(gap_sizes), 2) if gap_sizes else 0.0,
+        max_gap_pct=round(max(gap_sizes), 2) if gap_sizes else 0.0,
+    )
 
-    by_year: Dict[str, int] = defaultdict(int)
-    for d in detection_dates:
-        year = d[:4]
-        by_year[year] += 1
 
-    avg_gap = round(sum(gap_sizes) / len(gap_sizes), 2) if gap_sizes else 0.0
-    max_gap = round(max(gap_sizes), 2) if gap_sizes else 0.0
+def detect_gap_down(records: List[Dict], threshold: float = 0.02) -> Dict:
+    formula = "$open_i < close_{i-1} \\cdot (1 - \\theta)$"
+    definition = (
+        f"Día donde la apertura queda por debajo del cierre previo en al menos {threshold * 100:.1f}%"
+    )
+    algorithm = "Comparación día contra día anterior con cálculo directo del gap bajista."
+    if len(records) < 2:
+        return _empty_pattern_result(
+            "Gap Down",
+            formula,
+            algorithm,
+            definition,
+            threshold=threshold,
+            threshold_pct=threshold * 100,
+            average_gap_pct=0.0,
+            max_gap_pct=0.0,
+        )
 
-    return {
-        "pattern": "Gap Up",
-        "threshold": threshold,
-        "threshold_pct": threshold * 100,
-        "definition": f"Día donde open > prev_close × (1 + {threshold}) "
-                       f"= apertura superior al cierre anterior en al menos "
-                       f"{threshold * 100:.0f}%",
-        "formula": "open[i] > close[i-1] × (1 + threshold)",
-        "total_occurrences": len(detection_dates),
-        "by_year": dict(by_year),
-        "dates": detection_dates,
-        "last_occurrences": detection_dates[-5:] if detection_dates else [],
-        "average_gap_pct": avg_gap,
-        "max_gap_pct": max_gap,
-        "algorithm": (
-            "Comparación día contra día anterior:\n"
-            "1. Por cada día i: calcular ratio = open[i] / close[i-1]\n"
-            "2. Si ratio > 1 + threshold: Gap Up detectado\n"
-            "3. Calcular tamaño del gap como porcentaje\n"
-            "Complejidad: O(n) — una sola pasada"
-        ),
-        "complexity": "O(n)",
-    }
+    sorted_records = sorted(records, key=lambda x: x["date"])
+    occurrences = []
+    gap_sizes = []
+
+    for index in range(1, len(sorted_records)):
+        current = sorted_records[index]
+        previous = sorted_records[index - 1]
+        current_open = current.get("open")
+        previous_close = previous.get("close")
+        if current_open is None or previous_close is None or previous_close <= 0:
+            continue
+
+        gap_ratio = 1 - (current_open / previous_close)
+        if gap_ratio > threshold:
+            gap_pct = round(gap_ratio * 100, 2)
+            gap_sizes.append(gap_pct)
+            occurrences.append(
+                {
+                    "date": current["date"],
+                    "start_date": previous["date"],
+                    "end_date": current["date"],
+                    "duration": 1,
+                    "gap_pct": gap_pct,
+                    "change_pct": -gap_pct,
+                    "reference_close": round(previous_close, 4),
+                    "open_price": round(current_open, 4),
+                }
+            )
+
+    return _finalize_pattern_result(
+        "Gap Down",
+        sorted_records,
+        occurrences,
+        definition,
+        formula,
+        algorithm,
+        threshold=threshold,
+        threshold_pct=threshold * 100,
+        average_gap_pct=round(sum(gap_sizes) / len(gap_sizes), 2) if gap_sizes else 0.0,
+        max_gap_pct=round(max(gap_sizes), 2) if gap_sizes else 0.0,
+    )
+
+
+def detect_breakout_up(records: List[Dict], window: int = 20) -> Dict:
+    formula = "$close_i > \\max(close_{i-w}, \\ldots, close_{i-1})$"
+    definition = (
+        f"Cierre que supera el máximo de las {window} sesiones anteriores."
+    )
+    algorithm = "Ventana deslizante con comparación del cierre actual contra el máximo reciente."
+    if len(records) < window + 1:
+        return _empty_pattern_result(
+            "Breakout Up",
+            formula,
+            algorithm,
+            definition,
+            window=window,
+        )
+
+    sorted_records = _valid_close_records(records)
+    if len(sorted_records) < window + 1:
+        return _empty_pattern_result(
+            "Breakout Up",
+            formula,
+            algorithm,
+            definition,
+            window=window,
+        )
+
+    occurrences = []
+    for index in range(window, len(sorted_records)):
+        history = [record["close"] for record in sorted_records[index - window:index]]
+        reference = max(history)
+        current_close = sorted_records[index]["close"]
+        if current_close > reference:
+            change_pct = round(((current_close / reference) - 1) * 100, 2)
+            occurrences.append(
+                {
+                    "date": sorted_records[index]["date"],
+                    "start_date": sorted_records[index - window]["date"],
+                    "end_date": sorted_records[index]["date"],
+                    "duration": window,
+                    "change_pct": change_pct,
+                    "reference_price": round(reference, 4),
+                    "close_price": round(current_close, 4),
+                    "window": window,
+                }
+            )
+
+    return _finalize_pattern_result(
+        "Breakout Up",
+        sorted_records,
+        occurrences,
+        definition,
+        formula,
+        algorithm,
+        window=window,
+    )
+
+
+def detect_breakout_down(records: List[Dict], window: int = 20) -> Dict:
+    formula = "$close_i < \\min(close_{i-w}, \\ldots, close_{i-1})$"
+    definition = (
+        f"Cierre que perfora el mínimo de las {window} sesiones anteriores."
+    )
+    algorithm = "Ventana deslizante con comparación del cierre actual contra el mínimo reciente."
+    if len(records) < window + 1:
+        return _empty_pattern_result(
+            "Breakout Down",
+            formula,
+            algorithm,
+            definition,
+            window=window,
+        )
+
+    sorted_records = _valid_close_records(records)
+    if len(sorted_records) < window + 1:
+        return _empty_pattern_result(
+            "Breakout Down",
+            formula,
+            algorithm,
+            definition,
+            window=window,
+        )
+
+    occurrences = []
+    for index in range(window, len(sorted_records)):
+        history = [record["close"] for record in sorted_records[index - window:index]]
+        reference = min(history)
+        current_close = sorted_records[index]["close"]
+        if current_close < reference:
+            change_pct = round(((current_close / reference) - 1) * 100, 2)
+            occurrences.append(
+                {
+                    "date": sorted_records[index]["date"],
+                    "start_date": sorted_records[index - window]["date"],
+                    "end_date": sorted_records[index]["date"],
+                    "duration": window,
+                    "change_pct": change_pct,
+                    "reference_price": round(reference, 4),
+                    "close_price": round(current_close, 4),
+                    "window": window,
+                }
+            )
+
+    return _finalize_pattern_result(
+        "Breakout Down",
+        sorted_records,
+        occurrences,
+        definition,
+        formula,
+        algorithm,
+        window=window,
+    )
 
 
 class PatternAnalyzer:
-    """
-    Analizador de patrones en series temporales financieras.
-
-    Une los métodos de detección de patrones en una interfaz unificada
-    que trabaja con el formato de registros del pipeline ETL.
-
-    Uso:
-        analyzer = PatternAnalyzer()
-        result = analyzer.analyze(records, "VOO", pattern="consecutive_up", min_days=3)
-        result = analyzer.analyze(records, "VOO", pattern="gap_up", threshold=0.02)
-    """
+    """Analizador de patrones en series temporales financieras."""
 
     @staticmethod
     def _filter_symbol(records: List[Dict], symbol: str) -> List[Dict]:
-        """Filtra registros por símbolo. O(n)."""
-        return [r for r in records if r["symbol"] == symbol.upper()]
+        return [record for record in records if record["symbol"] == symbol.upper()]
 
     def analyze(
         self,
@@ -239,20 +465,8 @@ class PatternAnalyzer:
         pattern: str = "consecutive_up",
         min_days: int = 3,
         threshold: float = 0.02,
+        window: int = 20,
     ) -> Dict:
-        """
-        Analiza un patrón específico para un símbolo.
-
-        Parámetros:
-            records: Lista de registros financieros unificados
-            symbol: Símbolo del activo
-            pattern: Tipo de patrón ("consecutive_up" o "gap_up")
-            min_days: Días mínimos (solo para consecutive_up)
-            threshold: Umbral (solo para gap_up)
-
-        Retorna:
-            Resultado del análisis del patrón
-        """
         sym_records = self._filter_symbol(records, symbol)
         if not sym_records:
             return {
@@ -263,6 +477,14 @@ class PatternAnalyzer:
 
         if pattern == "gap_up":
             result = detect_gap_up(sym_records, threshold)
+        elif pattern == "gap_down":
+            result = detect_gap_down(sym_records, threshold)
+        elif pattern == "consecutive_down":
+            result = detect_consecutive_down(sym_records, min_days)
+        elif pattern == "breakout_up":
+            result = detect_breakout_up(sym_records, window)
+        elif pattern == "breakout_down":
+            result = detect_breakout_down(sym_records, window)
         else:
             result = detect_consecutive_up(sym_records, min_days)
 
@@ -270,3 +492,41 @@ class PatternAnalyzer:
         result["records_analyzed"] = len(sym_records)
         return result
 
+    def analyze_all(
+        self,
+        records: List[Dict],
+        symbols: List[str] = None,
+        pattern: str = "consecutive_up",
+        min_days: int = 3,
+        threshold: float = 0.02,
+        window: int = 20,
+    ) -> Dict:
+        if isinstance(symbols, str):
+            pattern = symbols
+            symbols = None
+
+        if symbols is None:
+            symbols = sorted(set(record["symbol"] for record in records))
+
+        results = {}
+        for symbol in symbols:
+            results[symbol] = self.analyze(
+                records,
+                symbol,
+                pattern,
+                min_days,
+                threshold,
+                window,
+            )
+
+        total = sum(
+            result.get("total_occurrences", 0)
+            for result in results.values()
+        )
+
+        return {
+            "pattern": pattern,
+            "results": results,
+            "total_occurrences": total,
+            "symbols_analyzed": len(symbols),
+        }

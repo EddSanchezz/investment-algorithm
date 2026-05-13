@@ -126,6 +126,11 @@ class TestCosine:
         except ValueError:
             pass
 
+    def test_zero_norm_vector(self):
+        result = cosine_similarity([0.0, 0.0], [1.0, -1.0])
+        assert result["similarity"] == 0.0
+        assert result["angle_degrees"] == 90.0
+
 
 class TestSimilarityAnalyzer:
     def setup_method(self):
@@ -181,3 +186,16 @@ class TestSimilarityAnalyzer:
         assert len(result["matrix"]) == 2
         assert result["matrix"][0][0] == 1.0
         assert result["matrix"][1][1] == 1.0
+
+    def test_compare_many(self):
+        records = self.records + [
+            {"date": "2024-01-01", "symbol": "QQQ", "close": 300.0, "open": 299.0, "high": 301.0, "low": 298.0, "volume": 1500},
+            {"date": "2024-01-02", "symbol": "QQQ", "close": 303.0, "open": 300.0, "high": 304.0, "low": 299.0, "volume": 1520},
+            {"date": "2024-01-03", "symbol": "QQQ", "close": 302.0, "open": 303.0, "high": 305.0, "low": 301.0, "volume": 1490},
+        ]
+        result = self.analyzer.compare_many(records, ["VOO", "SPY", "QQQ"], max_points=10)
+        assert result["mode"] == "group"
+        assert result["symbols"] == ["VOO", "SPY", "QQQ"]
+        assert len(result["pairwise"]) == 3
+        assert result["correlation_matrix"]["matrix"][0][0] == 1.0
+        assert "normalized_series" in result

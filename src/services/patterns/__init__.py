@@ -13,9 +13,22 @@ Componentes:
 
 from src.services.patterns.sliding_window import (
     PatternAnalyzer,
+    detect_breakout_down,
+    detect_breakout_up,
+    detect_consecutive_down,
     detect_consecutive_up,
+    detect_gap_down,
     detect_gap_up,
 )
 from src.services.patterns.volatility import VolatilityAnalyzer
 
-__all__ = ["PatternAnalyzer", "VolatilityAnalyzer", "detect_consecutive_up", "detect_gap_up"]
+__all__ = [
+    "PatternAnalyzer",
+    "VolatilityAnalyzer",
+    "detect_breakout_down",
+    "detect_breakout_up",
+    "detect_consecutive_down",
+    "detect_consecutive_up",
+    "detect_gap_down",
+    "detect_gap_up",
+]

@@ -7,7 +7,11 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.services.patterns.sliding_window import (
+    detect_breakout_down,
+    detect_breakout_up,
+    detect_consecutive_down,
     detect_consecutive_up,
+    detect_gap_down,
     detect_gap_up,
     PatternAnalyzer,
 )
@@ -99,6 +103,54 @@ class TestGapUp:
         assert result["total_occurrences"] == 0
 
 
+class TestConsecutiveDown:
+    def test_basic_detection(self):
+        records = [
+            {"date": "2024-01-01", "symbol": "VOO", "close": 103.0},
+            {"date": "2024-01-02", "symbol": "VOO", "close": 102.0},
+            {"date": "2024-01-03", "symbol": "VOO", "close": 101.0},
+            {"date": "2024-01-04", "symbol": "VOO", "close": 100.0},
+        ]
+        result = detect_consecutive_down(records, min_days=3)
+        assert result["total_occurrences"] == 1
+        assert result["dates"] == ["2024-01-04"]
+
+
+class TestGapDown:
+    def test_basic_detection(self):
+        records = [
+            {"date": "2024-01-01", "symbol": "VOO", "open": 100.0, "close": 100.0},
+            {"date": "2024-01-02", "symbol": "VOO", "open": 90.0, "close": 92.0},
+        ]
+        result = detect_gap_down(records, threshold=0.05)
+        assert result["total_occurrences"] == 1
+        assert result["average_gap_pct"] >= 9.0
+
+
+class TestBreakouts:
+    def test_breakout_up(self):
+        records = [
+            {"date": "2024-01-01", "symbol": "VOO", "close": 100.0},
+            {"date": "2024-01-02", "symbol": "VOO", "close": 101.0},
+            {"date": "2024-01-03", "symbol": "VOO", "close": 102.0},
+            {"date": "2024-01-04", "symbol": "VOO", "close": 105.0},
+        ]
+        result = detect_breakout_up(records, window=3)
+        assert result["total_occurrences"] == 1
+        assert result["dates"] == ["2024-01-04"]
+
+    def test_breakout_down(self):
+        records = [
+            {"date": "2024-01-01", "symbol": "VOO", "close": 105.0},
+            {"date": "2024-01-02", "symbol": "VOO", "close": 104.0},
+            {"date": "2024-01-03", "symbol": "VOO", "close": 103.0},
+            {"date": "2024-01-04", "symbol": "VOO", "close": 100.0},
+        ]
+        result = detect_breakout_down(records, window=3)
+        assert result["total_occurrences"] == 1
+        assert result["dates"] == ["2024-01-04"]
+
+
 class TestPatternAnalyzer:
     def setup_method(self):
         self.records = [
@@ -129,6 +181,31 @@ class TestPatternAnalyzer:
         result = self.analyzer.analyze(self.records, "FAKE", "consecutive_up")
         assert "error" in result
 
+    def test_analyze_consecutive_down(self):
+        descending_records = [
+            {"date": "2024-01-01", "symbol": "VOO", "close": 104.0},
+            {"date": "2024-01-02", "symbol": "VOO", "close": 103.0},
+            {"date": "2024-01-03", "symbol": "VOO", "close": 102.0},
+            {"date": "2024-01-04", "symbol": "VOO", "close": 101.0},
+        ]
+        result = self.analyzer.analyze(descending_records, "VOO", "consecutive_down", 3)
+        assert result["total_occurrences"] == 1
+
+    def test_analyze_breakout(self):
+        breakout_records = [
+            {"date": "2024-01-01", "symbol": "VOO", "close": 100.0},
+            {"date": "2024-01-02", "symbol": "VOO", "close": 101.0},
+            {"date": "2024-01-03", "symbol": "VOO", "close": 102.0},
+            {"date": "2024-01-04", "symbol": "VOO", "close": 105.0},
+        ]
+        result = self.analyzer.analyze(breakout_records, "VOO", "breakout_up", window=3)
+        assert result["total_occurrences"] == 1
+        assert result["window"] == 3
+
+    def test_analyze_all(self):
+        result = self.analyzer.analyze_all(self.records, "consecutive_up", min_days=3)
+        assert "results" in result
+        assert len(result["results"]) > 0
 
 class TestVolatilityMetrics:
     def test_daily_returns(self):

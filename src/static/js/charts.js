@@ -1,9 +1,21 @@
 /* Funciones comunes de Chart.js */
 
+const chartRegistry = window.__chartRegistry || {};
+window.__chartRegistry = chartRegistry;
+
+function destroyChart(canvasId) {
+    const existing = chartRegistry[canvasId] || Chart.getChart(canvasId);
+    if (existing) {
+        existing.destroy();
+        delete chartRegistry[canvasId];
+    }
+}
+
 function createLineChart(canvasId, labels, datasets, title) {
     const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
-    new Chart(ctx, {
+    if (!ctx) return null;
+    destroyChart(canvasId);
+    const chart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -15,6 +27,7 @@ function createLineChart(canvasId, labels, datasets, title) {
                 borderWidth: 2,
                 pointRadius: 0,
                 tension: 0.1,
+                spanGaps: true,
                 fill: false
             }))
         },
@@ -31,12 +44,15 @@ function createLineChart(canvasId, labels, datasets, title) {
             }
         }
     });
+    chartRegistry[canvasId] = chart;
+    return chart;
 }
 
 function createBarChart(canvasId, labels, data, label, color) {
     const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
-    new Chart(ctx, {
+    if (!ctx) return null;
+    destroyChart(canvasId);
+    const chart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
@@ -58,6 +74,18 @@ function createBarChart(canvasId, labels, data, label, color) {
             }
         }
     });
+    chartRegistry[canvasId] = chart;
+    return chart;
+}
+
+function renderMath(container) {
+    if (!container) return Promise.resolve();
+    if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+        return window.MathJax.typesetPromise([container]).catch(err => {
+            console.error('MathJax typeset error:', err);
+        });
+    }
+    return Promise.resolve();
 }
 
 function formatDate(dateStr) {
