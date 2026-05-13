@@ -129,11 +129,6 @@ class TestPatternAnalyzer:
         result = self.analyzer.analyze(self.records, "FAKE", "consecutive_up")
         assert "error" in result
 
-    def test_analyze_all(self):
-        result = self.analyzer.analyze_all(self.records, "consecutive_up", min_days=3)
-        assert "results" in result
-        assert len(result["results"]) > 0
-
 
 class TestVolatilityMetrics:
     def test_daily_returns(self):

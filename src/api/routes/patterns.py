@@ -1,14 +1,26 @@
 """
 Rutas de Patrones y Volatilidad — API REST para detección de patrones
 y análisis de riesgo.
+
+Endpoints:
+    GET /api/patterns?symbol=VOO&pattern=consecutive_up    detección de patrones
+    GET /api/volatility?symbol=VOO                         métricas de volatilidad
+    GET /api/volatility/ranking                            ranking completo de riesgo
+
+Complejidad:
+    /api/patterns              O(n) — ventana deslizante
+    /api/volatility            O(n) — desviación estándar
+    /api/volatility/ranking    O(s × n + s log s) — s = símbolos, n = registros
 """
 
+from typing import List, Dict
 from flask import Blueprint, jsonify, request
 from src.services.patterns import PatternAnalyzer, VolatilityAnalyzer
+from src.api.data import get_records
 
 patterns_bp = Blueprint("patterns", __name__)
-pattern_analyzer = PatternAnalyzer()
-volatility_analyzer = VolatilityAnalyzer()
+pattern_analyzer: PatternAnalyzer = PatternAnalyzer()
+volatility_analyzer: VolatilityAnalyzer = VolatilityAnalyzer()
 
 
 @patterns_bp.route("/api/patterns", methods=["GET"])
@@ -26,20 +38,19 @@ def detect_pattern():
         GET /api/patterns?symbol=VOO&pattern=consecutive_up&min_days=3
         GET /api/patterns?symbol=ECOPETROL&pattern=gap_up&threshold=0.02
     """
-    symbol = request.args.get("symbol", "").upper()
-    pattern = request.args.get("pattern", "consecutive_up")
-    min_days = request.args.get("min_days", 3, type=int)
-    threshold = request.args.get("threshold", 0.02, type=float)
+    symbol: str = request.args.get("symbol", "").upper()
+    pattern: str = request.args.get("pattern", "consecutive_up")
+    min_days: int = request.args.get("min_days", 3, type=int)
+    threshold: float = request.args.get("threshold", 0.02, type=float)
 
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
 
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
 
-    result = pattern_analyzer.analyze(records, symbol, pattern, min_days, threshold)
+    result: dict = pattern_analyzer.analyze(records, symbol, pattern, min_days, threshold)
     return jsonify(result)
 
 
@@ -54,17 +65,16 @@ def get_volatility():
     Ejemplo:
         GET /api/volatility?symbol=VOO
     """
-    symbol = request.args.get("symbol", "").upper()
+    symbol: str = request.args.get("symbol", "").upper()
 
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
 
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
 
-    result = volatility_analyzer.analyze(records, symbol)
+    result: dict = volatility_analyzer.analyze(records, symbol)
     return jsonify(result)
 
 
@@ -76,14 +86,10 @@ def get_volatility_ranking():
     Ejemplo:
         GET /api/volatility/ranking
     """
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
 
-    symbols = request.args.getlist("symbols")
-    if not symbols:
-        symbols = None
-
-    result = volatility_analyzer.ranking(records, symbols)
+    symbols: list = request.args.getlist("symbols") or None
+    result: dict = volatility_analyzer.ranking(records, symbols)
     return jsonify(result)

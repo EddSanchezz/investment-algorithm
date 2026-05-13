@@ -1,14 +1,27 @@
 """
-Rutas del Dashboard — API REST para candlestick, SMA, cleaning stats y datos del dashboard.
+Rutas del Dashboard — API REST para candlestick, SMA, cleaning stats y resumen.
+
+Endpoints:
+    GET /api/candlestick?symbol=VOO&smas=20,50        datos OHLC + SMA
+    GET /api/dashboard/summary                         resumen del portafolio
+    GET /api/etl/cleaning-stats                        estadísticas de calidad ETL
+
+Complejidad:
+    /api/candlestick          O(n) — filtrado + SMA
+    /api/dashboard/summary    O(s² × n) — matriz de correlación domina
+    /api/etl/cleaning-stats   O(n) — conteo de nulos y símbolos
 """
 
+from typing import List, Dict, Any
 from flask import Blueprint, jsonify, request
 from src.services.similarity import SimilarityAnalyzer
 from src.services.reporting.technical import simple_moving_average
+from src.services.patterns import VolatilityAnalyzer
+from src.api.data import get_records
 import os
 
 dashboard_bp = Blueprint("dashboard", __name__)
-analyzer = SimilarityAnalyzer()
+analyzer: SimilarityAnalyzer = SimilarityAnalyzer()
 
 
 @dashboard_bp.route("/api/candlestick", methods=["GET"])
@@ -31,12 +44,11 @@ def get_candlestick():
     if not symbol:
         return jsonify({"error": "Se requiere el parámetro symbol"}), 400
 
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
 
-    sym_records = [r for r in records if r["symbol"] == symbol]
+    sym_records: list = [r for r in records if r["symbol"] == symbol]
     if not sym_records:
         return jsonify({"error": f"No hay datos para {symbol}"}), 404
 
@@ -85,17 +97,14 @@ def dashboard_summary():
     Incluye: total activos, total registros, rango fechas,
     activo más y menos volátil, mejores correlaciones.
     """
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
 
-    from src.services.patterns import VolatilityAnalyzer
-    va = VolatilityAnalyzer()
-
-    symbols = sorted(set(r["symbol"] for r in records))
-    ranking = va.ranking(records, symbols)
-    corr = analyzer.compute_correlation_matrix(records, symbols)
+    va: VolatilityAnalyzer = VolatilityAnalyzer()
+    symbols: list = sorted(set(r["symbol"] for r in records))
+    ranking: dict = va.ranking(records, symbols)
+    corr: dict = analyzer.compute_correlation_matrix(records, symbols)
 
     highest_pair = None
     lowest_pair = None
@@ -145,16 +154,15 @@ def cleaning_stats():
     - Calidad: nulos por campo, registros por símbolo
     - Cobertura temporal por mercado
     """
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
 
-    total = len(records)
-    symbols = sorted(set(r["symbol"] for r in records))
-    dates = sorted(set(r["date"] for r in records))
+    total: int = len(records)
+    symbols: list = sorted(set(r["symbol"] for r in records))
+    dates: list = sorted(set(r["date"] for r in records))
 
-    nulls = {"open": 0, "high": 0, "low": 0, "close": 0, "volume": 0}
+    nulls: dict = {"open": 0, "high": 0, "low": 0, "close": 0, "volume": 0}
     for r in records:
         for f in nulls:
             if r.get(f) is None:

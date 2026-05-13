@@ -1,10 +1,11 @@
 """
 Tiingo Provider - API REST de Tiingo para datos financieros.
 
-API Token: 7ef477f89420fd2e44ed2f9020653ac672a2ddc8
+Requiere TIINGO_API_TOKEN en variable de entorno.
 Rate limit: 500 requests/hour, 20,000 requests/day
 """
 
+import os
 import time
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -14,7 +15,7 @@ import requests
 from .base import DataProvider
 
 
-API_TOKEN: str = "7ef477f89420fd2e44ed2f9020653ac672a2ddc8"
+API_TOKEN: str = os.environ.get("TIINGO_API_TOKEN", "")
 BASE_URL: str = "https://api.tiingo.com/tiingo/daily/{symbol}/prices"
 
 REQUEST_TIMEOUT: int = 30

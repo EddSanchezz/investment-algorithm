@@ -114,5 +114,3 @@ class FinancialDataFetcher:
         """Cierra recursos del fetcher."""
         self._fetcher.close()
 
-
-YahooFinanceFetcher = FinancialDataFetcher

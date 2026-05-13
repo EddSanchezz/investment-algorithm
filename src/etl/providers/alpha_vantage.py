@@ -1,10 +1,11 @@
 """
 Alpha Vantage Provider - API REST para datos financieros.
 
-API Key proporcionada: IBD4X6CDOXUYO12B
+Requiere ALPHA_VANTAGE_API_KEY en variable de entorno.
 Rate limit: 5 calls/minute, 500 calls/day
 """
 
+import os
 import time
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -14,7 +15,7 @@ import requests
 from .base import DataProvider
 
 
-API_KEY: str = "IBD4X6CDOXUYO12B"
+API_KEY: str = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
 BASE_URL: str = "https://www.alphavantage.co/query"
 
 REQUEST_TIMEOUT: int = 30

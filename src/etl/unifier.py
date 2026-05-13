@@ -117,7 +117,7 @@ class DataUnifier:
     Complejidad espacial: O(n) para almacenar el dataset unificado
     """
 
-    COLOMBIAN_SYMBOLS = ["ECOPETROL", "ISA", "GEB", "NUTRCSA"]
+    COLOMBIAN_SYMBOLS = ["ECOPETROL", "ISA", "GEB", "NUTRESA"]
 
     REQUIRED_FIELDS = ["date", "symbol", "open", "high", "low", "close", "volume"]
 

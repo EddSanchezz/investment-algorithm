@@ -1,19 +1,29 @@
 """
 Rutas de Reportes — API REST para generación y descarga de PDF.
+
+Endpoints:
+    POST /api/report/generate   genera PDF con portada, correlación, riesgo,
+                                candlestick y tabla de similitud
+
+Complejidad:
+    /api/report/generate   O(s² × n) — matriz de correlación + ranking =
+                                       dos pasadas sobre todos los registros
 """
 
 import os
 from datetime import datetime
+from typing import Dict, Any, Optional
 from flask import Blueprint, jsonify, request, send_file
 from src.services.reporting.pdf_report import PDFReportGenerator
 from src.services.similarity import SimilarityAnalyzer
 from src.services.patterns import VolatilityAnalyzer
 from src.services.reporting.technical import simple_moving_average
+from src.api.data import get_records
 
 reports_bp = Blueprint("reports", __name__)
-analyzer = SimilarityAnalyzer()
-volatility_analyzer = VolatilityAnalyzer()
-OUTPUT_DIR = "outputs"
+analyzer: SimilarityAnalyzer = SimilarityAnalyzer()
+volatility_analyzer: VolatilityAnalyzer = VolatilityAnalyzer()
+OUTPUT_DIR: str = "outputs"
 
 
 @reports_bp.route("/api/report/generate", methods=["POST"])
@@ -27,13 +37,12 @@ def generate_report():
     Retorna:
         Archivo PDF para descarga
     """
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
 
-    data = request.get_json(silent=True) or {}
-    symbols = sorted(set(r["symbol"] for r in records))
+    data: dict = request.get_json(silent=True) or {}
+    symbols: list = sorted(set(r["symbol"] for r in records))
     main_symbol = data.get("symbol", symbols[0] if symbols else "VOO").upper()
     if main_symbol not in symbols and symbols:
         main_symbol = symbols[0]

@@ -9,7 +9,7 @@ from typing import List, Dict
 import requests
 
 
-class InvestingScraper:
+class YahooFallbackFetcher:
     """
     Scraper alternativo de datos financieros usando Yahoo Finance API.
 

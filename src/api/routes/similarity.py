@@ -1,14 +1,24 @@
 """
 Rutas de Similitud — API REST para algoritmos de comparación de activos.
+
+Endpoints:
+    GET /api/similarity?s1=VOO&s2=SPY      4 métricas de similitud
+    GET /api/similarity/symbols             lista de símbolos disponibles
+    GET /api/correlation-matrix             matriz de correlación n×n
+
+Complejidad:
+    /api/similarity           O(n) — dominado por la comparación de series
+    /api/similarity/symbols   O(n) — para listar símbolos únicos
+    /api/correlation-matrix   O(s² × n) — s = símbolos, n = registros
 """
 
+from typing import Dict, Any
 from flask import Blueprint, jsonify, request
 from src.services.similarity import SimilarityAnalyzer
-from src.etl.unifier import DataUnifier
+from src.api.data import get_records
 
 similarity_bp = Blueprint("similarity", __name__)
-analyzer = SimilarityAnalyzer()
-_unifier = DataUnifier()
+analyzer: SimilarityAnalyzer = SimilarityAnalyzer()
 
 
 @similarity_bp.route("/api/similarity", methods=["GET"])
@@ -26,18 +36,17 @@ def compare_symbols():
     Ejemplo:
         GET /api/similarity?s1=VOO&s2=SPY
     """
-    s1 = request.args.get("s1", "").upper()
-    s2 = request.args.get("s2", "").upper()
+    s1: str = request.args.get("s1", "").upper()
+    s2: str = request.args.get("s2", "").upper()
 
     if not s1 or not s2:
         return jsonify({"error": "Se requieren los parámetros s1 y s2"}), 400
 
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
 
-    result = analyzer.compare(records, s1, s2)
+    result: Dict[str, Any] = analyzer.compare(records, s1, s2)
 
     if "error" in result:
         return jsonify(result), 404
@@ -47,15 +56,16 @@ def compare_symbols():
 
 @similarity_bp.route("/api/similarity/symbols", methods=["GET"])
 def list_symbols():
-    """Retorna la lista de símbolos disponibles con mercado de origen."""
-    from src.api.gateway import get_records
-    records = get_records()
+    """Retorna la lista de símbolos disponibles con mercado de origen. O(n)."""
+    from src.etl.unifier import DataUnifier
+    records: list = get_records()
     if not records:
         return jsonify({"symbols": [], "market_map": {}})
 
-    symbols = sorted(set(r["symbol"] for r in records))
-    market_map = {
-        sym: "bvc" if _unifier._is_colombian(sym) else "nyse"
+    symbols: list = sorted(set(r["symbol"] for r in records))
+    unifier: DataUnifier = DataUnifier()
+    market_map: dict = {
+        sym: "bvc" if unifier._is_colombian(sym) else "nyse"
         for sym in symbols
     }
     return jsonify({"symbols": symbols, "market_map": market_map})
@@ -72,12 +82,11 @@ def correlation_matrix():
     Ejemplo:
         GET /api/correlation-matrix
     """
-    from src.api.gateway import get_records
-    records = get_records()
+    records: list = get_records()
     if not records:
         return jsonify({"error": "No hay datos disponibles"}), 404
 
-    symbols = sorted(set(r["symbol"] for r in records))
-    result = analyzer.compute_correlation_matrix(records, symbols)
+    symbols: list = sorted(set(r["symbol"] for r in records))
+    result: dict = analyzer.compute_correlation_matrix(records, symbols)
 
     return jsonify(result)

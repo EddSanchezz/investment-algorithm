@@ -1,15 +1,14 @@
 """
-Web Scraper Provider - Scraping de 5 sitios financieros populares.
+Web Scraper Provider — Scraping de sitios financieros populares.
 
 Sites en orden de prioridad:
-1. Investing.com - Mejor para acciones colombianas
-2. Google Finance - Simple y confiable
-3. MarketWatch - ETFs y acciones US
-4. CNBC - Cobertura global
-5. Bloomberg - Último recurso (anti-scraping)
+1. StockAnalysis — Cobertura internacional (BVC)
+2. Investing.com — Acciones colombianas
+3. Google Finance — Simple y confiable
+4. MarketWatch — ETFs y acciones US
 
-Cada sitio tiene su propio método que intenta scrapeo.
-El primer sitio que retorna datos detiene la búsqueda.
+Cada sitio tiene su propio método. El primero que retorna datos
+detiene la búsqueda.
 """
 
 import time
@@ -295,103 +294,6 @@ class WebScraperProvider(DataProvider):
                     continue
 
             return records
-
-        except Exception:
-            return []
-
-    def _try_cnbc(self, symbol: str, start_date: datetime, end_date: datetime) -> List[Dict]:
-        """Intenta scrapeo de CNBC."""
-        url = f"https://www.cnbc.com/quotes/{symbol}/historical.html"
-
-        try:
-            response = self._session.get(url, timeout=REQUEST_TIMEOUT)
-            if response.status_code != 200:
-                return []
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            table = soup.find("table", {"class": "historical-symbol-history"})
-            if not table:
-                return []
-
-            rows = table.find_all("tr")[1:]
-            records: List[Dict] = []
-
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) < 6:
-                    continue
-
-                try:
-                    date_str = cols[0].get_text(strip=True)
-                    record_date = datetime.strptime(date_str, "%m/%d/%Y")
-
-                    if not (start_date <= record_date <= end_date):
-                        continue
-
-                    records.append({
-                        "date": record_date.strftime("%Y-%m-%d"),
-                        "symbol": symbol,
-                        "open": self._safe_float(cols[1].get_text()),
-                        "high": self._safe_float(cols[2].get_text()),
-                        "low": self._safe_float(cols[3].get_text()),
-                        "close": self._safe_float(cols[4].get_text()),
-                        "volume": self._safe_int(cols[5].get_text()),
-                    })
-                except (ValueError, IndexError):
-                    continue
-
-            return records
-
-        except Exception:
-            return []
-
-    def _try_bloomberg(self, symbol: str, start_date: datetime, end_date: datetime) -> List[Dict]:
-        """Intenta scrapeo de Bloomberg (último recurso, a menudo bloquea)."""
-        url = f"https://www.bloomberg.com/quote/{symbol}:US"
-
-        try:
-            response = self._session.get(url, timeout=REQUEST_TIMEOUT)
-            if response.status_code != 200:
-                return []
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            script_tags = soup.find_all("script")
-            for script in script_tags:
-                if script.string and "historicalData" in script.string:
-                    import json
-                    import re
-
-                    match = re.search(r'historicalData":(\{.*?\})', script.string)
-                    if match:
-                        data = json.loads(match.group(1))
-                        if "data" in data:
-                            records = []
-                            for item in data["data"]:
-                                try:
-                                    date_str = item.get("date", "")
-                                    record_date = datetime.strptime(date_str, "%Y-%m-%d")
-
-                                    if not (start_date <= record_date <= end_date):
-                                        continue
-
-                                    records.append({
-                                        "date": date_str,
-                                        "symbol": symbol,
-                                        "open": item.get("open"),
-                                        "high": item.get("high"),
-                                        "low": item.get("low"),
-                                        "close": item.get("close"),
-                                        "volume": item.get("volume"),
-                                    })
-                                except (ValueError, TypeError, KeyError):
-                                    continue
-
-                            if records:
-                                return records
-
-            return []
 
         except Exception:
             return []

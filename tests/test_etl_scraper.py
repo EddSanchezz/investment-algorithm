@@ -1,5 +1,5 @@
 """
-Tests unitarios para InvestingScraper (src.etl.scraper).
+Tests unitarios para YahooFallbackFetcher (src.etl.scraper).
 Usa mocking para evitar llamadas HTTP reales.
 """
 
@@ -8,12 +8,12 @@ from unittest.mock import patch, Mock
 from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.etl.scraper import InvestingScraper
+from src.etl.scraper import YahooFallbackFetcher
 
 
 class TestFetchHistoricalData:
     def setup_method(self):
-        self.scraper = InvestingScraper()
+        self.scraper = YahooFallbackFetcher()
         self.start = datetime(2024, 1, 1)
         self.end = datetime(2024, 1, 5)
         self.sample_json = {
@@ -92,7 +92,7 @@ class TestFetchHistoricalData:
         assert len(records) == 1
 
     def test_default_end_date(self):
-        scraper = InvestingScraper()
+        scraper = YahooFallbackFetcher()
         records = scraper.fetch_historical_data("VOO", self.start)
         assert isinstance(records, list)
 
@@ -104,9 +104,9 @@ class TestFetchHistoricalData:
 
 class TestFetchMultipleAssets:
     def setup_method(self):
-        self.scraper = InvestingScraper()
+        self.scraper = YahooFallbackFetcher()
 
-    @patch("src.etl.scraper.InvestingScraper.fetch_historical_data")
+    @patch("src.etl.scraper.YahooFallbackFetcher.fetch_historical_data")
     def test_multiple_symbols(self, mock_fetch):
         mock_fetch.return_value = [
             {"date": "2024-01-01", "symbol": "VOO", "close": 100.0}
