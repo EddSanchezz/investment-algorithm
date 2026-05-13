@@ -165,14 +165,15 @@ class SortingComparator:
             String con tabla formateada
         """
         header = (
-            f"{'Algoritmo':<25} {'Complejidad':<15} {'Tamaño':<10} {'Tiempo (s)':<15}"
+            f"{'Algoritmo':<25} {'Complejidad':<15} {'Tamaño':<10} {'Tiempo (ms)':<15}"
         )
         separator = "-" * 75
 
         lines = [header, separator]
 
         for r in results:
-            time_str = f"{r['average_time']:.6f}"
+            time_ms = r["average_time"] * 1000
+            time_str = f"{time_ms:.4f}"
             line = f"{r['algorithm']:<25} {r['complexity']:<15} {r['size']:<10} {time_str:<15}"
             lines.append(line)
 

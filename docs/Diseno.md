@@ -45,10 +45,19 @@ investment-algorithm/
 │   │           └── dashboard.html  # Dashboard completo + exportación PDF
 │   ├── etl/
 │   │   ├── __init__.py
-│   │   ├── fetcher.py              # Extracción HTTP directo (Yahoo Finance)
-│   │   ├── scraper.py              # Scraper alternativo (fallback)
+│   │   ├── fetcher.py              # Orquestador multi-fuente (delega en providers/)
+│   │   ├── scraper.py              # Scraper alternativo (fallback legacy)
 │   │   ├── cleaner.py              # Limpieza: duplicados, outliers, interpolación
-│   │   └── unifier.py              # Unificación, alineación de calendarios
+│   │   ├── unifier.py              # Unificación, alineación de calendarios
+│   │   └── providers/              # Sistema Multi-Source con fallback automático
+│   │       ├── __init__.py
+│   │       ├── base.py             # DataProvider (interfaz abstracta)
+│   │       ├── multi_source.py     # MultiSourceFetcher (orquestador)
+│   │       ├── tiingo.py           # Tiingo API (principal, 500 req/h)
+│   │       ├── yahoo_api.py        # Yahoo Finance API (rate limiting)
+│   │       ├── alpha_vantage.py    # Alpha Vantage API
+│   │       ├── web_scraper.py      # Scraping 5 sitios financieros
+│   │       └── binance.py          # Binance API (solo crypto)
 │   ├── services/
 │   │   ├── similarity/             # Req 2: 4 algoritmos de similitud
 │   │   │   ├── __init__.py         # SimilarityAnalyzer (agregador)
@@ -97,21 +106,24 @@ investment-algorithm/
 ### 2.2 Flujo de Ejecución
 
 ```
+Multi-Source (Tiingo → Yahoo → Alpha Vantage → Web Scraper → Binance)
+                           │
+                           ▼
 Extracción (fetcher) → Limpieza (cleaner) → Unificación (unifier)
                                                     │
-                          ┌─────────────────────────┘
-                          ▼
-              Alineación de Calendarios
-                          │
-              ┌───────────┼───────────┐
-              ▼           ▼           ▼
-         Similitud    Patrones    Dashboard
-        (4 alg.)    (sliding     (correlación,
-                     window,      candlestick,
-                     volatilidad)  PDF)
-              │           │           │
-              ▼           ▼           ▼
-         API REST — App Web (Flask + Chart.js)
+                           ┌─────────────────────────┘
+                           ▼
+               Alineación de Calendarios
+                           │
+               ┌───────────┼───────────┐
+               ▼           ▼           ▼
+          Similitud    Patrones    Dashboard
+         (4 alg.)    (sliding     (correlación,
+                      window,      candlestick,
+                      volatilidad)  PDF)
+               │           │           │
+               ▼           ▼           ▼
+          API REST — App Web (Flask + Chart.js)
 ```
 
 ### 2.3 Stack Tecnológico
@@ -132,21 +144,56 @@ Extracción (fetcher) → Limpieza (cleaner) → Unificación (unifier)
 
 ## 3. Requerimiento 1 — ETL Automatizado
 
-### 3.1 Extracción (peticiones HTTP directas)
+### 3.1 Extracción — Sistema Multi-Source con Fallback Automático
 
-Se utiliza Yahoo Finance API mediante HTTP directo, cumpliendo con la restricción de no usar librerías de alto nivel como `yfinance`.
+Se implementó una arquitectura Multi-Source que intenta obtener datos de 5 proveedores en secuencia, deteniéndose en el primero que retorna datos exitosamente. Esto garantiza robustez ante fallos de APIs individuales, rate limiting o cambios en la estructura de sitios web.
 
-**Construcción de la consulta:**
+**Arquitectura:**
+
 ```
-GET https://query1.finance.yahoo.com/v8/finance/chart/{SIMBOLO}
-    ?period1={TIMESTAMP_INICIO}
-    &period2={TIMESTAMP_FIN}
-    &interval=1d
+MultiSourceFetcher (orquestador)
+    │
+    ├── [1] Tiingo API          → 500 req/hora gratis, datos ajustados
+    ├── [2] Yahoo Finance API   → Rate limiting mejorado + Circuit Breaker
+    ├── [3] Alpha Vantage API   → 5 calls/minuto, cobertura global
+    ├── [4] Web Scraper         → 5 sitios (StockAnalysis, Investing.com,
+    │                              Google Finance, MarketWatch, CNBC)
+    └── [5] Binance API         → Solo crypto (BTC, ETH, etc.)
 ```
 
-**Parsing manual:** Se extraen los arrays `timestamp` e `indicators.quote` de la respuesta JSON, iterando sobre cada posición para construir registros OHLCV (Open, High, Low, Close, Volume).
+Cada proveedor implementa la interfaz abstracta `DataProvider` (`providers/base.py`):
 
-**Manejo de errores:** Reintentos automáticos (MAX_RETRIES = 3) con backoff exponencial (2s, 4s, 6s).
+```python
+class DataProvider(ABC):
+    @abstractmethod
+    def fetch(self, symbol, start_date, end_date) -> List[Dict]: ...
+    def is_available(self) -> bool: ...
+    def close(self) -> None: ...
+```
+
+**Orden de prioridad:** Tiingo → Yahoo Finance → Alpha Vantage → Web Scraper → Binance
+
+El `MultiSourceFetcher` (`providers/multi_source.py`) itera sobre los providers, llama a `fetch()` y retorna los datos del primer proveedor que retorna una lista no vacía. Si todos fallan, retorna lista vacía.
+
+**Proveedores implementados:**
+
+| Proveedor | Archivo | API Key | Rate Limit | Cobertura |
+|-----------|---------|---------|------------|-----------|
+| Tiingo | `tiingo.py` | Sí (incluida) | 500 req/hora | US stocks, ETFs, ADRs |
+| Yahoo Finance | `yahoo_api.py` | No | ~200 req/hora práctica | Global |
+| Alpha Vantage | `alpha_vantage.py` | Sí (incluida) | 5 calls/min, 500/día | Global |
+| Web Scraper | `web_scraper.py` | No | N/A (depende del sitio) | 5 sitios financieros |
+| Binance | `binance.py` | No | 1200 req/min | Crypto (BTC, ETH, etc.) |
+
+**Mecanismos de tolerancia a fallos:**
+
+1. **Yahoo Finance — Circuit Breaker**: Tras 20 fallos consecutivos, espera 120 segundos antes de reintentar. Esto evita saturar la API cuando está rate limitando.
+2. **Alpha Vantage — Rate limiting propio**: Delay de 12.5s entre llamadas para respetar el límite de 5 calls/min.
+3. **Web Scraper — Multi-sitio**: Si un sitio cambia su HTML o bloquea, automáticamente prueba el siguiente sitio (StockAnalysis → Investing → Google Finance → MarketWatch → CNBC).
+4. **Delay entre providers**: 1s entre cambios de proveedor.
+5. **Delay entre símbolos**: 2s entre descargas de distintos activos.
+
+**Parsing manual:** Cada proveedor parsea la respuesta JSON o HTML a un formato OHLCV unificado: `{date, symbol, open, high, low, close, volume}`.
 
 **20 activos:** 4 acciones colombianas (ECOPETROL.CL, ISA.CL, GEB.CL, NUTRESA.CL) + 16 ETFs internacionales (VOO, VTI, QQQ, SPY, VEA, VWO, BND, EFA, EEM, TLT, IVV, SCHD, DIA, IWM, XLF, XLK).
 
@@ -463,7 +510,8 @@ El flag `--force-download` garantiza que los datos se descarguen desde cero, sin
 
 | Componente | Algoritmo | Complejidad Temporal | Complejidad Espacial |
 |------------|-----------|---------------------|---------------------|
-| ETL - Descarga | HTTP requests paralelizados | O(a) requests | O(n × a) datos |
+| ETL - Multi-Source | 5 providers en secuencia | O(p × r) requests | O(n × a) datos |
+| ETL - Descarga | HTTP requests por provider | O(a) requests | O(n × a) datos |
 | ETL - Duplicados | HashSet | O(n) | O(n) |
 | ETL - Outliers Z-Score | Media + Desviación | O(n) | O(1) |
 | ETL - Outliers IQR | Ordenar + Cuartiles | O(n log n) | O(n) |
@@ -490,18 +538,28 @@ Donde:
 - d = días en el rango temporal
 - m = longitud de segunda serie (DTW)
 - w = ancho de banda Sakoe-Chiba
+- p = número de providers (5)
+- r = número de reintentos por provider
 
 ---
 
 ## 9. Tests Unitarios
 
-**Total**: 47 tests, todos pasando.
+**Total**: 139 tests, todos pasando.
 
 | Archivo | Tests | Cobertura |
 |---------|-------|-----------|
 | `tests/test_similarity.py` | 20 | Distancia Euclidiana, Pearson, DTW, Coseno, SimilarityAnalyzer |
 | `tests/test_patterns.py` | 21 | Consecutive Up, Gap Up, PatternAnalyzer, retornos, desviación, volatilidad, clasificación, VolatilityAnalyzer, ranking |
 | `tests/test_dashboard.py` | 6 | SMA con diferentes ventanas, casos borde |
+| `tests/test_etl_fetcher.py` | 4 | MultiSourceFetcher, fetch_historical_data, fetch_multiple_assets, save_to_csv |
+| `tests/test_etl_cleaner.py` | 26 | Duplicados, outliers Z-Score/IQR, interpolación, forward/backward fill, pipeline completo |
+| `tests/test_etl_unifier.py` | 10 | Unificación, estadísticas, símbolos disponibles, integración |
+| `tests/test_etl_scraper.py` | 8 | Scraper básico, símbolo inválido, conexión fallida, parseo |
+| `tests/test_comparator.py` | 9 | Comparator con todos los algoritmos |
+| `tests/test_sorting.py` | 12 | Algoritmos de ordenamiento (TimSort, Comb, Selection, Tree, etc.) |
+| `tests/test_api_gateway.py` | 14 | Endpoints, blueprints, HTML pages |
+| `tests/test_pdf_report.py` | 5 | Generación de PDF con diferentes configuraciones |
 
 Ejecución: `task test` o `python -m pytest tests/ -v`
 
@@ -547,13 +605,19 @@ de fuentes externas (páginas web en español, documentación técnica) y no se 
 | 8 | *"El scraper.py falla silenciosamente con ciertos símbolos"* | Validar todos los campos OHLCV (no solo `open`). Cambiar `except Exception` por `except (KeyError, TypeError, IndexError)` para no tragar errores de programación. |
 | 9 | *"El cosine retorna similarity > 1.0 por errores de punto flotante"* | Hacer clamp del valor retornado, no solo del input de `acos`. Usar `clamped = max(-1.0, min(1.0, similarity))` y retornar `clamped`. |
 | 10 | *"¿Cómo asegurar reproducibilidad con --force-download?"* | El flag debe skipear el caché de archivos CSV y forzar descarga + recleaning + reunificación completa. Agregar `--use-scraper` opcional para cambiar entre API y BeautifulSoup. |
+| 11 | *"Yahoo Finance rate limita mucho. ¿Cómo hacer un sistema multi-fuente con fallback?"* | Crear interfaz abstracta `DataProvider`, implementar 5 providers (Tiingo, Yahoo, Alpha Vantage, Web Scraper, Binance). `MultiSourceFetcher` orquesta el fallback automático. |
+| 12 | *"El scraper de Investing.com ya no funciona. ¿Cómo añadir StockAnalysis y Google Finance?"* | Refactorizar scraper monolítico a `ScraperProvider` con múltiples sitios encadenados. Cada sitio tiene su propio método `_try_sitio()` y se prueban en secuencia. |
+| 13 | *"¿Cómo integrar Binance para los símbolos crypto del portafolio?"* | Crear `BinanceProvider` que usa `/api/v3/klines`. Detectar símbolos crypto y delegar directamente bypassando el Web Scraper. |
 
 ---
 
 ## 11. Limitaciones y Trabajo Futuro
 
 ### Limitaciones conocidas
-- La API de Yahoo Finance puede tener rate limiting (500 peticiones por hora)
+- Tiingo API tiene cobertura limitada para tickers colombianos (solo ADRs)
+- Alpha Vantage tiene rate limit muy restrictivo (5 calls/minuto)
+- Los scrapers web dependen de la estructura HTML que puede cambiar sin previo aviso
+- Yahoo Finance sigue siendo propenso a rate limiting (>200 req/hora)
 - Los festivos colombianos se modelan con fechas fijas (no móviles como Semana Santa)
 - El DTW sin restricción de ventana tiene complejidad O(n²) para series largas
 - La generación de PDF usa archivos temporales para imágenes matplotlib

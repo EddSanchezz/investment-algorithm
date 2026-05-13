@@ -91,6 +91,11 @@ def run_benchmark():
 
     results = comparator.compare_all(records, runs=1)
 
+    for r in results:
+        r["average_time"] = r["average_time"] * 1000
+        r["min_time"] = r["min_time"] * 1000
+        r["max_time"] = r["max_time"] * 1000
+
     return jsonify({"dataset_size": len(records), "results": results})
 
 

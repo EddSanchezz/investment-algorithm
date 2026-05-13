@@ -110,10 +110,12 @@ class TestBlueprintRoutes:
         data = resp.get_json()
         assert "error" in data
 
-    def test_risk_blueprint_no_data(self, client):
+    def test_risk_blueprint_ranking(self, client):
         resp = client.get("/api/volatility/ranking")
-        # 404 because no data file exists in test env
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "ranking" in data
+        assert "summary" in data
 
     def test_dashboard_blueprint_missing_param(self, client):
         resp = client.get("/api/candlestick")

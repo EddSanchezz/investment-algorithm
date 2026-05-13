@@ -8,7 +8,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.etl.fetcher import FinancialDataFetcher
-from src.etl.scraper import InvestingScraper
 from src.etl.cleaner import DataCleaner
 from src.etl.unifier import DataUnifier
 from src.sorting.comparator import SortingComparator
@@ -38,11 +37,10 @@ class InvestmentPipeline:
         "xlk",
     ]
 
-    def __init__(self, data_dir: str = "data", use_scraper: bool = False):
+    def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
         self.raw_dir = os.path.join(data_dir, "raw")
         self.processed_dir = os.path.join(data_dir, "processed")
-        self.use_scraper = use_scraper
 
         os.makedirs(self.raw_dir, exist_ok=True)
         os.makedirs(self.processed_dir, exist_ok=True)
@@ -76,13 +74,8 @@ class InvestmentPipeline:
 
         raw_file = os.path.join(self.raw_dir, "raw_data.csv")
 
-        if self.use_scraper:
-            print("Usando web scraping (Yahoo Finance API)...")
-            with InvestingScraper() as scraper:
-                all_records = scraper.fetch_multiple_assets(symbols, years)
-        else:
-            print("Usando Yahoo Finance API...")
-            all_records = self.fetcher.fetch_multiple_assets(symbols, years)
+        print("Usando sistema Multi-Source (Yahoo -> Alpha Vantage -> Web Scraper -> Binance)...")
+        all_records = self.fetcher.fetch_multiple_assets(symbols, years)
 
         if not all_records:
             print("ERROR: No se pudieron obtener datos.")
@@ -171,10 +164,11 @@ class InvestmentPipeline:
     def _save_sorting_csv(self, results: list, filepath: str) -> None:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, "w", newline="", encoding="utf-8") as f:
-            f.write("Metodo de ordenamiento,Tamano,Tiempo (s)\n")
+            f.write("Metodo de ordenamiento,Tamano,Tiempo (ms)\n")
             for r in results:
+                time_ms = r["average_time"] * 1000
                 f.write(
-                    f"{r['algorithm']} {r['complexity']},{r['size']},{r['average_time']:.6f}\n"
+                    f"{r['algorithm']} {r['complexity']},{r['size']},{time_ms:.4f}\n"
                 )
         print(f"Resultados de ordenamiento guardados en {filepath}")
 
@@ -271,15 +265,10 @@ def main():
         action="store_true",
         help="Forzar descarga aunque existan datos previos (garantiza reproducibilidad)",
     )
-    parser.add_argument(
-        "--use-scraper",
-        action="store_true",
-        help="Usar web scraping en vez de API de Yahoo Finance",
-    )
 
     args = parser.parse_args()
 
-    pipeline = InvestmentPipeline(use_scraper=args.use_scraper)
+    pipeline = InvestmentPipeline()
 
     unified_file = os.path.join(pipeline.processed_dir, "unified_data.csv")
     if args.force_download or not os.path.exists(unified_file):
