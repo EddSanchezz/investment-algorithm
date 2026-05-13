@@ -26,3 +26,5 @@ data/processed/*.png
 .DS_Store
 *.csv
 *.png
+Plan.md
+Proyecto.md

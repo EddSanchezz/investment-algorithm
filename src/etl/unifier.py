@@ -387,7 +387,7 @@ class DataUnifier:
         symbols = set(r["symbol"] for r in records)
         dates = [r["date"] for r in records]
 
-        total_volume = sum(r["volume"] for r in records)
+        total_volume = sum(r["volume"] or 0 for r in records)
         avg_volume = total_volume / len(records)
 
         return {
