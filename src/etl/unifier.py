@@ -341,7 +341,7 @@ class DataUnifier:
                         "high": float(row["high"]),
                         "low": float(row["low"]),
                         "close": float(row["close"]),
-                        "volume": int(row["volume"]),
+                        "volume": int(row["volume"]) if row.get("volume") and row["volume"].strip() else 0,
                     }
                     if self.validate_record(record):
                         records.append(record)

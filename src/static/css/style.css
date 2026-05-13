@@ -625,6 +625,27 @@ table tr:hover {
     background: #e0e7ff;
 }
 
+.btn-mode {
+    padding: 8px 20px;
+    background: #eef2ff;
+    color: #4338ca;
+    border: 1px solid #c7d2fe;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.btn-mode.active {
+    background: #6c63ff;
+    color: #fff;
+    border-color: #6c63ff;
+}
+
+.btn-mode:hover:not(.active) {
+    background: #e0e7ff;
+}
+
 .selection-summary {
     font-size: 12px;
     color: #6b7280;

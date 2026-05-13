@@ -2,32 +2,68 @@
 {% block title %}Similitud{% endblock %}
 {% block content %}
 <h1>Análisis de Similitud</h1>
-<p class="subtitle">Compare 2 o más activos con gráficos multi-activo, matriz de correlación y detalle algorítmico cuando se selecciona un par.</p>
+<p class="subtitle">Visualice series individuales o compare 2+ activos con gráficos normalizados base 100, matriz de correlación y detalle algorítmico.</p>
 
 <div class="card">
+    <h2>Modo de Visualización</h2>
     <div class="form-row">
-        <div class="form-group">
-            <label for="windowPoints">Ventana reciente</label>
-            <select id="windowPoints">
-                <option value="90">90 días</option>
-                <option value="180">180 días</option>
-                <option value="252" selected>252 días</option>
-                <option value="504">504 días</option>
-            </select>
-        </div>
-        <button class="btn" onclick="loadSimilarity()">Comparar Selección</button>
-        <button class="btn-tertiary" onclick="selectFirstSymbols(2)">Seleccionar 2</button>
-        <button class="btn-tertiary" onclick="selectAllSymbols()">Seleccionar Todos</button>
-        <button class="btn-tertiary" onclick="clearSymbolSelection()">Limpiar</button>
+        <button class="btn-mode" id="btnModeSingle" onclick="setMode('single')">Activo Individual</button>
+        <button class="btn-mode active" id="btnModeCompare" onclick="setMode('compare')">Comparación</button>
     </div>
-    <p class="selection-summary" id="selectionSummary">Cargando activos...</p>
-    <div class="selection-grid" id="symbolGrid"></div>
 </div>
 
-<div id="errorBox" style="display:none;" class="inline-error"></div>
-<div id="results" class="section-stack"></div>
+<div id="singleModeSection">
+    <div class="card">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="singleSymbol">Activo</label>
+                <select id="singleSymbol"></select>
+            </div>
+            <div class="form-group">
+                <label for="singleWindow">Ventana reciente</label>
+                <select id="singleWindow">
+                    <option value="90">90 días</option>
+                    <option value="180">180 días</option>
+                    <option value="252" selected>252 días</option>
+                    <option value="504">504 días</option>
+                    <option value="0">Serie completa</option>
+                </select>
+            </div>
+            <button class="btn" onclick="loadSingleSymbol()">Ver Activo</button>
+        </div>
+    </div>
+    <div id="singleErrorBox" style="display:none;" class="inline-error"></div>
+    <div id="singleResults" class="section-stack"></div>
+</div>
+
+<div id="compareModeSection" style="display:none;">
+    <div class="card">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="windowPoints">Ventana reciente</label>
+                <select id="windowPoints">
+                    <option value="90">90 días</option>
+                    <option value="180">180 días</option>
+                    <option value="252" selected>252 días</option>
+                    <option value="504">504 días</option>
+                </select>
+            </div>
+            <button class="btn" onclick="loadSimilarity()">Comparar Selección</button>
+            <button class="btn-tertiary" onclick="selectFirstSymbols(2)">Seleccionar 2</button>
+            <button class="btn-tertiary" onclick="selectAllSymbols()">Seleccionar Todos</button>
+            <button class="btn-tertiary" onclick="clearSymbolSelection()">Limpiar</button>
+        </div>
+        <p class="selection-summary" id="selectionSummary">Cargando activos...</p>
+        <div class="selection-grid" id="symbolGrid"></div>
+    </div>
+    <div id="errorBox" style="display:none;" class="inline-error"></div>
+    <div id="results" class="section-stack"></div>
+</div>
 
 <script>
+let currentMode = 'compare';
+let allSymbols = [];
+
 const similarityPalette = ['#6c63ff', '#22c55e', '#ef4444', '#0ea5e9', '#f59e0b', '#8b5cf6', '#14b8a6', '#ec4899'];
 
 const formulaGuide = [
@@ -53,14 +89,22 @@ const formulaGuide = [
     }
 ];
 
-function showErrorBox(message) {
-    const box = document.getElementById('errorBox');
+function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('btnModeSingle').classList.toggle('active', mode === 'single');
+    document.getElementById('btnModeCompare').classList.toggle('active', mode === 'compare');
+    document.getElementById('singleModeSection').style.display = mode === 'single' ? 'block' : 'none';
+    document.getElementById('compareModeSection').style.display = mode === 'compare' ? 'block' : 'none';
+}
+
+function showErrorBox(boxId, message) {
+    const box = document.getElementById(boxId);
     box.textContent = message;
     box.style.display = 'block';
 }
 
-function clearErrorBox() {
-    const box = document.getElementById('errorBox');
+function clearErrorBox(boxId) {
+    const box = document.getElementById(boxId);
     box.textContent = '';
     box.style.display = 'none';
 }
@@ -146,6 +190,31 @@ function renderCorrelationTable(symbols, matrix) {
     return html;
 }
 
+function renderSingleMode(data) {
+    document.getElementById('singleResults').innerHTML = `
+        <div class="insight-grid">
+            <div class="insight-card"><h4>Activo</h4><div class="value">${data.symbol}</div><div class="meta">${data.count} días de datos</div></div>
+            <div class="insight-card"><h4>Precio Inicial</h4><div class="value">${data.prices.length > 0 ? data.prices[0].toFixed(2) : '-'}</div><div class="meta">${data.dates[0] || '-'}</div></div>
+            <div class="insight-card"><h4>Precio Final</h4><div class="value">${data.prices.length > 0 ? data.prices[data.prices.length - 1].toFixed(2) : '-'}</div><div class="meta">${data.dates[data.dates.length - 1] || '-'}</div></div>
+            <div class="insight-card"><h4>Cambio Total</h4><div class="value">${data.prices.length > 1 ? (((data.prices[data.prices.length - 1] / data.prices[0] - 1) * 100).toFixed(2) + '%' : '-'}</div><div class="meta">En el período seleccionado</div></div>
+        </div>
+        <div class="card">
+            <h2>Precio de Cierre — ${data.symbol}</h2>
+            <p class="section-desc">Serie de precios absolutos de cierre.</p>
+            <div class="chart-container"><canvas id="singleChart"></canvas></div>
+        </div>
+    `;
+
+    createLineChart(
+        'singleChart',
+        data.dates || [],
+        [{ label: data.symbol, data: data.prices || [], color: similarityPalette[0] }],
+        `Precio de cierre — ${data.symbol}`
+    );
+
+    renderMath(document.getElementById('singleResults'));
+}
+
 function renderPairMode(data) {
     const eu = data.euclidean || {};
     const pe = data.pearson || {};
@@ -160,8 +229,8 @@ function renderPairMode(data) {
             <div class="insight-card"><h4>Coseno</h4><div class="value">${co.similarity != null ? co.similarity.toFixed(4) : '-'}</div><div class="meta">${co.interpretation || ''}</div></div>
         </div>
         <div class="card">
-            <h2>Precios Históricos</h2>
-            <p class="section-desc">Serie de precios de cierre alineada en fechas comunes.</p>
+            <h2>Serie Normalizada Base 100 — ${data.symbol1} vs ${data.symbol2}</h2>
+            <p class="section-desc">Evolución relativa de ambos activos partiendo de base 100.</p>
             <div class="chart-container"><canvas id="priceChart"></canvas></div>
         </div>
         <div class="card">
@@ -183,15 +252,15 @@ function renderPairMode(data) {
         ${renderFormulaGuide()}
     `;
 
-    const series = data.series || {};
+    const normalized = data.normalized_series || {};
     createLineChart(
         'priceChart',
-        series.dates || [],
+        normalized.dates || [],
         [
-            { label: data.symbol1, data: series[data.symbol1] || [], color: similarityPalette[0] },
-            { label: data.symbol2, data: series[data.symbol2] || [], color: similarityPalette[1] },
+            { label: data.symbol1, data: normalized[data.symbol1] || [], color: similarityPalette[0] },
+            { label: data.symbol2, data: normalized[data.symbol2] || [], color: similarityPalette[1] },
         ],
-        `${data.symbol1} vs ${data.symbol2}`
+        `Evolución relativa — ${data.symbol1} vs ${data.symbol2}`
     );
 
     renderMath(document.getElementById('results'));
@@ -277,8 +346,10 @@ async function loadSymbols() {
     try {
         const res = await fetch('/api/similarity/symbols');
         const data = await res.json();
+        allSymbols = data.symbols || [];
+
         const grid = document.getElementById('symbolGrid');
-        grid.innerHTML = data.symbols.map((symbol, index) => `
+        grid.innerHTML = allSymbols.map((symbol, index) => `
             <label class="selection-chip ${index < 2 ? 'is-selected' : ''}">
                 <input type="checkbox" value="${symbol}" ${index < 2 ? 'checked' : ''}>
                 <span>${symbol}</span>
@@ -289,9 +360,36 @@ async function loadSymbols() {
             input.addEventListener('change', syncSelectionStyles);
         });
 
+        const singleSelect = document.getElementById('singleSymbol');
+        if (singleSelect) {
+            singleSelect.innerHTML = allSymbols.map(symbol =>
+                `<option value="${symbol}">${symbol}</option>`
+            ).join('');
+        }
+
         syncSelectionStyles();
     } catch (error) {
-        showErrorBox('Error al cargar los símbolos disponibles.');
+        showErrorBox('errorBox', 'Error al cargar los símbolos disponibles.');
+    }
+}
+
+async function loadSingleSymbol() {
+    clearErrorBox('singleErrorBox');
+    const symbol = document.getElementById('singleSymbol').value;
+    const window_ = document.getElementById('singleWindow').value;
+    const results = document.getElementById('singleResults');
+    results.innerHTML = '<p>Cargando...</p>';
+
+    try {
+        const res = await fetch(`/api/similarity/single?symbol=${symbol}&window=${window_}`);
+        const data = await res.json();
+        if (data.error) {
+            showErrorBox('singleErrorBox', data.error);
+            return;
+        }
+        renderSingleMode(data);
+    } catch (error) {
+        showErrorBox('singleErrorBox', 'Error al cargar los datos del activo.');
     }
 }
 
@@ -299,11 +397,11 @@ async function loadSimilarity() {
     const selected = getSelectedSymbols();
     const windowPoints = document.getElementById('windowPoints').value;
     const results = document.getElementById('results');
-    clearErrorBox();
+    clearErrorBox('errorBox');
     results.innerHTML = '';
 
     if (selected.length < 2) {
-        showErrorBox('Seleccione al menos 2 activos para comparar.');
+        showErrorBox('errorBox', 'Seleccione al menos 2 activos para comparar.');
         return;
     }
 
@@ -313,7 +411,7 @@ async function loadSimilarity() {
             const res = await fetch(`/api/similarity?s1=${s1}&s2=${s2}&window=${windowPoints}`);
             const data = await res.json();
             if (data.error) {
-                showErrorBox(data.error);
+                showErrorBox('errorBox', data.error);
                 return;
             }
             renderPairMode(data);
@@ -327,12 +425,12 @@ async function loadSimilarity() {
         const res = await fetch(`/api/similarity/group?${params.toString()}`);
         const data = await res.json();
         if (data.error) {
-            showErrorBox(data.error);
+            showErrorBox('errorBox', data.error);
             return;
         }
         renderGroupMode(data);
     } catch (error) {
-        showErrorBox('Error al calcular la similitud solicitada.');
+        showErrorBox('errorBox', 'Error al calcular la similitud solicitada.');
     }
 }
 

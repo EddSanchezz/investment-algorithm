@@ -204,13 +204,20 @@ class SimilarityAnalyzer:
                 symbol1.upper(): prices1,
                 symbol2.upper(): prices2,
             },
+            "normalized_series": {
+                "dates": dates,
+                symbol1.upper(): self._normalize_series(prices1),
+                symbol2.upper(): self._normalize_series(prices2),
+            },
         }
 
-        results["euclidean"] = euclidean_distance(prices1, prices2)
+        results["euclidean"] = euclidean_distance(results["normalized_series"][symbol1.upper()], results["normalized_series"][symbol2.upper()])
         results["pearson"] = pearson_correlation(returns1, returns2)
+        norm_returns1 = self._returns(results["normalized_series"][symbol1.upper()])
+        norm_returns2 = self._returns(results["normalized_series"][symbol2.upper()])
         dtw_window = min(252, max(len(prices1), len(prices2)) // 10) if max_points else None
-        results["dtw"] = dtw_distance(prices1, prices2, window=dtw_window, full_matrix=False)
-        results["cosine"] = cosine_similarity(returns1, returns2)
+        results["dtw"] = dtw_distance(results["normalized_series"][symbol1.upper()], results["normalized_series"][symbol2.upper()], window=dtw_window, full_matrix=False)
+        results["cosine"] = cosine_similarity(norm_returns1, norm_returns2)
 
         return results
 
