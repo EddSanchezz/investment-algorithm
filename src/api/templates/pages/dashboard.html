@@ -254,6 +254,7 @@
         <select id="pdfSymbol"></select>
       </div>
       <button class="btn" onclick="downloadPDF(event)">📥 Generar PDF</button>
+      <button class="btn btn-primary" id="refreshDataBtn">✨ Actualizar Datos (ETL)</button>
     </div>
   </div>
   <div class="card">
@@ -1031,5 +1032,31 @@ async function downloadPDF(event) {
 
 // ─── SMA TOGGLE HOTKEY ───
 document.getElementById('techSymbol')?.addEventListener('change', loadTechnical);
+
+// ─── DATA REFRESH BUTTON ───
+document.addEventListener('DOMContentLoaded', () => {
+  const refreshBtn = document.getElementById('refreshDataBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.textContent = '⏳ Iniciando ETL...';
+      refreshBtn.disabled = true;
+      try {
+        const res = await fetch('/api/refresh-data', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          alert('Proceso ETL iniciado con éxito. Por favor, espere unos minutos y recargue la página para ver los datos actualizados.');
+        } else {
+          alert(`Error al iniciar ETL: ${data.message || res.statusText}`);
+        }
+      } catch (e) {
+        alert('Error de red al intentar iniciar el ETL.');
+        console.error('Error refreshing data:', e);
+      } finally {
+        refreshBtn.textContent = '✨ Actualizar Datos (ETL)';
+        refreshBtn.disabled = false;
+      }
+    });
+  }
+});
 </script>
 {% endblock %}

@@ -28,7 +28,7 @@ investment-algorithm/
 │   ├── __init__.py
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── gateway.py              # App factory + registro de Blueprints
+│   │   ├── gateway.py              # App factory + registro de Blueprints + Endpoint ETL
 │   │   ├── routes/
 │   │   │   ├── __init__.py
 │   │   │   ├── similarity.py       # Req 2: endpoints de similitud
@@ -42,11 +42,11 @@ investment-algorithm/
 │   │           ├── similarity.html # Comparación interactiva de similitud
 │   │           ├── patterns.html   # Detección de patrones
 │   │           ├── risk.html       # Ranking de riesgo por volatilidad
-│   │           └── dashboard.html  # Dashboard completo + exportación PDF
+│   │           └── dashboard.html  # Dashboard completo + botón ETL
 │   ├── etl/
 │   │   ├── __init__.py
 │   │   ├── fetcher.py              # Orquestador multi-fuente (delega en providers/)
-│   │   ├── scraper.py              # Scraper alternativo (fallback legacy)
+│   │   ├── scraper.py              # YahooFallbackFetcher (fallback legacy)
 │   │   ├── cleaner.py              # Limpieza: duplicados, outliers, interpolación
 │   │   ├── unifier.py              # Unificación, alineación de calendarios
 │   │   └── providers/              # Sistema Multi-Source con fallback automático
@@ -54,9 +54,8 @@ investment-algorithm/
 │   │       ├── base.py             # DataProvider (interfaz abstracta)
 │   │       ├── multi_source.py     # MultiSourceFetcher (orquestador)
 │   │       ├── tiingo.py           # Tiingo API (principal, 500 req/h)
-│   │       ├── yahoo_api.py        # Yahoo Finance API (rate limiting)
 │   │       ├── alpha_vantage.py    # Alpha Vantage API
-│   │       ├── web_scraper.py      # Scraping 5 sitios financieros
+│   │       ├── web_scraper.py      # Scraping de 4 sitios financieros
 │   │       └── binance.py          # Binance API (solo crypto)
 │   ├── services/
 │   │   ├── similarity/             # Req 2: 4 algoritmos de similitud
@@ -77,7 +76,21 @@ investment-algorithm/
 │   │   └── main_runner.py          # Orquestador del pipeline
 │   ├── sorting/                    # 12 algoritmos de ordenamiento
 │   │   ├── __init__.py
-│   │   ├── algorithms.py
+│   │   ├── algorithms.py           # Wrapper SortingAlgorithms
+│   │   ├── algos/                  # Archivos individuales por algoritmo
+│   │   │   ├── __init__.py
+│   │   │   ├── selection_sort.py
+│   │   │   ├── comb_sort.py
+│   │   │   ├── gnome_sort.py
+│   │   │   ├── tim_sort.py
+│   │   │   ├── quicksort.py
+│   │   │   ├── heapsort.py
+│   │   │   ├── tree_sort.py
+│   │   │   ├── binary_insertion_sort.py
+│   │   │   ├── pigeonhole_sort.py
+│   │   │   ├── bucket_sort.py
+│   │   │   ├── bitonic_sort.py
+│   │   │   └── radix_sort.py
 │   │   ├── comparator.py
 │   │   └── visualizer.py
 │   ├── static/
@@ -97,6 +110,7 @@ investment-algorithm/
 ├── Proyecto.md                     # Enunciado del proyecto
 ├── Plan.md                         # Plan de desarrollo
 ├── requirements.txt
+├── .env.example                    # Plantilla para variables de entorno
 ├── Taskfile.yml
 ├── docker-compose.yml
 ├── Dockerfile.api
@@ -140,6 +154,8 @@ Extracción (fetcher) → Limpieza (cleaner) → Unificación (unifier)
 | Linter | Ruff 0.1 | Calidad de código |
 | Infra | Docker + Taskfile | Contenedores y automatización |
 
+**Nota**: Se ha evitado el uso de librerías de alto nivel para la adquisición de datos financieros o la implementación directa de algoritmos complejos, adhiriéndonos a las restricciones del `Proyecto.md`.
+
 ---
 
 ## 3. Requerimiento 1 — ETL Automatizado
@@ -156,8 +172,8 @@ MultiSourceFetcher (orquestador)
     ├── [1] Tiingo API          → 500 req/hora gratis, datos ajustados
     ├── [2] Yahoo Finance API   → Rate limiting mejorado + Circuit Breaker
     ├── [3] Alpha Vantage API   → 5 calls/minuto, cobertura global
-    ├── [4] Web Scraper         → 5 sitios (StockAnalysis, Investing.com,
-    │                              Google Finance, MarketWatch, CNBC)
+    ├── [4] Web Scraper         → 4 sitios (StockAnalysis, Investing.com,
+    │                              Google Finance, MarketWatch)
     └── [5] Binance API         → Solo crypto (BTC, ETH, etc.)
 ```
 
@@ -179,19 +195,19 @@ El `MultiSourceFetcher` (`providers/multi_source.py`) itera sobre los providers,
 
 | Proveedor | Archivo | API Key | Rate Limit | Cobertura |
 |-----------|---------|---------|------------|-----------|
-| Tiingo | `tiingo.py` | Sí (incluida) | 500 req/hora | US stocks, ETFs, ADRs |
-| Yahoo Finance | `yahoo_api.py` | No | ~200 req/hora práctica | Global |
-| Alpha Vantage | `alpha_vantage.py` | Sí (incluida) | 5 calls/min, 500/día | Global |
-| Web Scraper | `web_scraper.py` | No | N/A (depende del sitio) | 5 sitios financieros |
+| Tiingo | `tiingo.py` | Sí (variable de entorno) | 500 req/hora | US stocks, ETFs, ADRs |
+| Yahoo Fallback | `src/etl/scraper.py` | No | ~200 req/hora práctica | Global |
+| Alpha Vantage | `alpha_vantage.py` | Sí (variable de entorno) | 5 calls/min, 500/día | Global |
+| Web Scraper | `web_scraper.py` | No | N/A (depende del sitio) | 4 sitios financieros |
 | Binance | `binance.py` | No | 1200 req/min | Crypto (BTC, ETH, etc.) |
 
 **Mecanismos de tolerancia a fallos:**
 
-1. **Yahoo Finance — Circuit Breaker**: Tras 20 fallos consecutivos, espera 120 segundos antes de reintentar. Esto evita saturar la API cuando está rate limitando.
-2. **Alpha Vantage — Rate limiting propio**: Delay de 12.5s entre llamadas para respetar el límite de 5 calls/min.
-3. **Web Scraper — Multi-sitio**: Si un sitio cambia su HTML o bloquea, automáticamente prueba el siguiente sitio (StockAnalysis → Investing → Google Finance → MarketWatch → CNBC).
-4. **Delay entre providers**: 1s entre cambios de proveedor.
-5. **Delay entre símbolos**: 2s entre descargas de distintos activos.
+1.  **Yahoo Finance — Circuit Breaker**: Tras 20 fallos consecutivos, espera 120 segundos antes de reintentar. Esto evita saturar la API cuando está rate limitando.
+2.  **Alpha Vantage — Rate limiting propio**: Delay de 12.5s entre llamadas para respetar el límite de 5 calls/min.
+3.  **Web Scraper — Multi-sitio**: Si un sitio cambia su HTML o bloquea, automáticamente prueba el siguiente sitio (StockAnalysis → Investing → Google Finance → MarketWatch). `CNBC` y `Bloomberg` han sido removidos debido a su alta propensión a bloqueo.
+4.  **Delay entre providers**: 1s entre cambios de proveedor.
+5.  **Delay entre símbolos**: 2s entre descargas de distintos activos.
 
 **Parsing manual:** Cada proveedor parsea la respuesta JSON o HTML a un formato OHLCV unificado: `{date, symbol, open, high, low, close, volume}`.
 
@@ -230,25 +246,25 @@ El `MultiSourceFetcher` (`providers/multi_source.py`) itera sobre los providers,
 - **Aplicación**: Valores faltantes al inicio de la serie
 
 **Orden del pipeline de limpieza:**
-1. Duplicados primero (afectan estadísticas)
-2. Outliers después (basados en estadísticas corregidas)
-3. Interpolación último (usa contexto temporal completo)
-   - Lineal primero (mejor estimación con vecinos)
-   - Forward-fill segundo (respaldo si falta vecino anterior)
-   - Backward-fill último (respaldo si falta vecino siguiente)
+1.  Duplicados primero (afectan estadísticas)
+2.  Outliers después (basados en estadísticas corregidas)
+3.  Interpolación último (usa contexto temporal completo)
+    - Lineal primero (mejor estimación con vecinos)
+    - Forward-fill segundo (respaldo si falta vecino anterior)
+    - Backward-fill último (respaldo si falta vecino siguiente)
 
 ### 3.3 Alineación de Calendarios Bursátiles
 
 Se implementó un sistema de detección de días hábiles para cada mercado:
 
-- **BVC (Colombia)**: 18 festivos fijos por año + fines de semana
-- **NYSE (EE.UU.)**: 10 festivos fijos por año + fines de semana
+-   **BVC (Colombia)**: 18 festivos fijos por año + fines de semana
+-   **NYSE (EE.UU.)**: 10 festivos fijos por año + fines de semana
 
 **Algoritmo de alineación:**
-1. Para cada símbolo, se identifica su mercado (BVC o NYSE)
-2. Se calcula la unión de todos los días hábiles de ambos mercados
-3. Para fechas donde un activo no tiene datos, se inserta un registro con valores `None`
-4. El `DataCleaner` interpola esos valores en la siguiente etapa
+1.  Para cada símbolo, se identifica su mercado (BVC o NYSE)
+2.  Se calcula la unión de todos los días hábiles de ambos mercados
+3.  Para fechas donde un activo no tiene datos, se inserta un registro con valores `None`
+4.  El `DataCleaner` interpola esos valores en la siguiente etapa
 
 **Complejidad**: O(s × d + n) donde s = símbolos, d = días en el rango, n = registros
 
@@ -328,10 +344,10 @@ cos(θ) = (x · y) / (||x|| · ||y||) = Σ(xᵢ · yᵢ) / √(Σxᵢ²) · √(
 **Archivo**: `src/services/similarity/__init__.py`
 
 La clase `SimilarityAnalyzer` coordina los 4 algoritmos:
-1. Extrae y alinea series de dos símbolos por fecha común (O(n))
-2. Calcula retornos diarios (O(n))
-3. Ejecuta los 4 algoritmos y retorna resultados estructurados
-4. Método `compute_correlation_matrix()` para matriz completa O(s² × n)
+1.  Extrae y alinea series de dos símbolos por fecha común (O(n))
+2.  Calcula retornos diarios (O(n))
+3.  Ejecuta los 4 algoritmos y retorna resultados estructurados
+4.  Método `compute_correlation_matrix()` para matriz completa O(s² × n)
 
 **Endpoint API**: `GET /api/similarity?s1=VOO&s2=SPY`
 
@@ -344,22 +360,22 @@ La clase `SimilarityAnalyzer` coordina los 4 algoritmos:
 **Archivo**: `src/services/patterns/sliding_window.py`
 
 #### Patrón 1: Días Consecutivos al Alza
-- **Definición**: Secuencia de N días donde close > close anterior
-- **Algoritmo**: Contador acumulado — O(n) tiempo, O(1) espacio
-  ```
-  contador = 0
-  para cada día i:
-    si close[i] > close[i-1]: contador++
-    sino: contador = 0
-    si contador >= N: patrón detectado
-  ```
-- **Endpoint**: `GET /api/patterns?symbol=VOO&pattern=consecutive_up&min_days=3`
+-   **Definición**: Secuencia de N días donde close > close anterior
+-   **Algoritmo**: Contador acumulado — O(n) tiempo, O(1) espacio
+    ```
+    contador = 0
+    para cada día i:
+      si close[i] > close[i-1]: contador++
+      sino: contador = 0
+      si contador >= N: patrón detectado
+    ```
+-   **Endpoint**: `GET /api/patterns?symbol=VOO&pattern=consecutive_up&min_days=3`
 
 #### Patrón 2: Gap Up
-- **Definición**: Día donde open > prev_close × (1 + threshold)
-- **Algoritmo**: Comparación día contra día anterior — O(n)
-- **Parámetro**: threshold configurable (default 2%)
-- **Endpoint**: `GET /api/patterns?symbol=VOO&pattern=gap_up&threshold=0.02`
+-   **Definición**: Día donde open > prev_close × (1 + threshold)
+-   **Algoritmo**: Comparación día contra día anterior — O(n)
+-   **Parámetro**: threshold configurable (default 2%)
+-   **Endpoint**: `GET /api/patterns?symbol=VOO&pattern=gap_up&threshold=0.02`
 
 ### 5.2 Volatilidad y Clasificación de Riesgo
 
@@ -394,8 +410,8 @@ Se usan 252 días de negociación como estándar bursátil.
 **Complejidad total**: O(s × n + s log s) donde s = número de símbolos, n = registros por símbolo.
 
 **Endpoints**:
-- `GET /api/volatility?symbol=VOO` — Métricas individuales
-- `GET /api/volatility/ranking` — Ranking completo
+-   `GET /api/volatility?symbol=VOO` — Métricas individuales
+-   `GET /api/volatility/ranking` — Ranking completo
 
 ---
 
@@ -405,9 +421,9 @@ Se usan 252 días de negociación como estándar bursátil.
 
 Calcula el coeficiente de Pearson entre todos los pares de activos.
 
-- **Complejidad**: O(s² × n) donde s = símbolos, n = observaciones
-- **Visualización**: Heatmap dinámico en el frontend (colores por valor)
-- **Endpoint**: `GET /api/correlation-matrix`
+-   **Complejidad**: O(s² × n) donde s = símbolos, n = observaciones
+-   **Visualización**: Heatmap dinámico en el frontend (colores por valor)
+-   **Endpoint**: `GET /api/correlation-matrix`
 
 ### 6.2 Media Móvil Simple (SMA)
 
@@ -417,9 +433,9 @@ Calcula el coeficiente de Pearson entre todos los pares de activos.
 SMA[i] = (cumsum[i] - cumsum[i - window]) / window
 ```
 
-- SMA-20: media de 20 días (~1 mes de negociación)
-- SMA-50: media de 50 días (~2.5 meses)
-- **Complejidad**: O(n) con suma acumulativa
+-   SMA-20: media de 20 días (~1 mes de negociación)
+-   SMA-50: media de 50 días (~2.5 meses)
+-   **Complejidad**: O(n) con suma acumulativa
 
 **Endpoint**: `GET /api/candlestick?symbol=VOO&smas=20,50&limit=252`
 
@@ -430,12 +446,12 @@ SMA[i] = (cumsum[i] - cumsum[i - window]) / window
 **Tecnología**: ReportLab para estructura + matplotlib para gráficos incrustados.
 
 **Secciones del PDF:**
-1. **Portada**: Universidad, curso, título, fecha de generación
-2. **Resumen del Portafolio**: activos, registros, rango de fechas
-3. **Matriz de Correlación**: heatmap generado con matplotlib, tabla de pares extremos
-4. **Ranking de Riesgo**: tabla completa con colores por categoría, distribución
-5. **Candlestick**: gráfico de precios con SMA-20 y SMA-50
-6. **Similitud**: tabla con las 4 métricas del par más correlacionado
+1.  **Portada**: Universidad, curso, título, fecha de generación
+2.  **Resumen del Portafolio**: activos, registros, rango de fechas
+3.  **Matriz de Correlación**: heatmap generado con matplotlib, tabla de pares extremos
+4.  **Ranking de Riesgo**: tabla completa con colores por categoría, distribución
+5.  **Candlestick**: gráfico de precios con SMA-20 y SMA-50
+6.  **Similitud**: tabla con las 4 métricas del par más correlacionado
 
 **Endpoint**: `POST /api/report/generate` (con JSON opcional `{"symbol": "VOO"}`)
 
@@ -457,6 +473,8 @@ La API está organizada en Blueprints de Flask para modularidad:
 | | `GET /api/volatility/ranking` | Ranking de riesgo |
 | `dashboard_bp` | `GET /api/candlestick` | Datos OHLC + SMA |
 | | `GET /api/dashboard/summary` | Resumen del dashboard |
+| | `GET /api/etl/cleaning-stats` | Estadísticas de limpieza ETL |
+| `gateway.py` | `POST /api/refresh-data` | Iniciar proceso ETL asíncronamente |
 | `reports_bp` | `POST /api/report/generate` | Generar PDF |
 
 Además, rutas HTML para las páginas del frontend:
@@ -464,7 +482,7 @@ Además, rutas HTML para las páginas del frontend:
 - `/similarity` — Página de similitud interactiva
 - `/patterns` — Página de patrones
 - `/risk` — Página de riesgo
-- `/dashboard` — Dashboard completo
+- `/dashboard` — Dashboard completo (con botón para ETL)
 
 ### 7.2 Frontend
 
@@ -475,11 +493,32 @@ Tecnología: Jinja2 (templates Flask) + Chart.js (visualizaciones).
 - **Similitud**: Selector de 2 activos, gráfica superpuesta, tabla de 4 métricas, explicación matemática
 - **Patrones**: Selector de activo + patrón, gráfica de frecuencia por año, últimas ocurrencias
 - **Riesgo**: Ranking ordenado con colores, gráfico doughnut de distribución, stats resumen
-- **Dashboard**: Heatmap de correlación dinámico, candlestick con toggle SMA-20/SMA-50, botón de exportación PDF
+- **Dashboard**: Heatmap de correlación dinámico, candlestick con toggle SMA-20/SMA-50, botón de exportación PDF, **botón para iniciar ETL**
 
 ### 7.3 Despliegue
 
-**Docker**:
+**Despliegue en Render (Servicio Web)**:
+
+-   **Build Command**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+-   **Start Command**:
+    ```bash
+    gunicorn --workers 4 --bind 0.0.0.0:$PORT src.api.gateway:create_app
+    ```
+-   **Environment Variables** (en la configuración de Render):
+    - `TIINGO_API_TOKEN`: `tu_token_aqui` (con valor real)
+    - `ALPHA_VANTAGE_API_KEY`: `tu_api_key_aqui` (con valor real)
+    - `PYTHONUNBUFFERED`: `1`
+
+**Consideraciones para el ETL en Render:**
+El proceso ETL (`src.services.main_runner`) es una tarea de larga duración y no debe ser parte del `Start Command` del servicio web. Para producción, se recomienda:
+-   **Opción Recomendada**: Configurar un **servicio separado en Render** (ej. un `Cron Job` para ejecución programada diaria/semanal, o un `Background Worker` para ejecución bajo demanda) dedicado exclusivamente al ETL.
+    - **Comando de inicio para Cron/Worker**: `python -m src.services.main_runner --force-download`
+-   **Opción para el botón del Frontend (solución de prototipo)**: El botón en el frontend (`/dashboard`) llama a `POST /api/refresh-data`. Este endpoint inicia el ETL en un proceso separado (`subprocess.Popen`) dentro del mismo contenedor del servicio web. Esta solución *no es robusta para producción*, ya que puede afectar la capacidad de respuesta de la API y no garantiza la finalización del ETL si el servicio web se reinicia o se queda sin recursos. Se usa para demostrar la funcionalidad del botón.
+
+**Docker (alternativa local)**:
 ```bash
 docker-compose up    # Inicia API + ETL
 ```
@@ -503,6 +542,8 @@ python -m src.api.gateway
 ```
 
 El flag `--force-download` garantiza que los datos se descarguen desde cero, sin usar caché.
+
+**Advertencia**: El botón de ETL en el frontend solo inicia el proceso asíncronamente en el mismo contenedor del servicio web. Para despliegues de producción y ETLs pesados, se recomienda usar un servicio de `Cron Job` o `Background Worker` separado en Render (o similar) para ejecutar `python -m src.services.main_runner --force-download` de manera más robusta e independiente.
 
 ---
 
@@ -545,7 +586,7 @@ Donde:
 
 ## 9. Tests Unitarios
 
-**Total**: 139 tests, todos pasando.
+**Total**: 154 tests, todos pasando.
 
 | Archivo | Tests | Cobertura |
 |---------|-------|-----------|
@@ -586,6 +627,7 @@ En el desarrollo de este proyecto se utilizó inteligencia artificial generativa
 - La fundamentación matemática de cada algoritmo
 - Las decisiones de diseño arquitectónico
 - La interpretación de resultados financieros
+- La estructuración final de los algoritmos en archivos individuales (.py) con sus docstrings educativos (incluyendo diagramas ASCII y descripciones de pasos) – esta tarea fue guiada por el modelo, pero la implementación detallada y la curación final fueron manuales para asegurar la calidad pedagógica.
 
 ### Registro de Prompts de Asistencia
 
@@ -596,7 +638,7 @@ de fuentes externas (páginas web en español, documentación técnica) y no se 
 | # | Prompt | Respuesta |
 |---|--------|-----------|
 | 1 | *"El test de NaN en euclidean.py falla porque la norma da NaN. ¿Qué falta?"* | Filtrar `None` y `NaN` de ambas series antes de calcular la suma de cuadrados. Agregar `_validate_series()` que retorna `(0, 0, 0)` si alguna serie queda vacía tras el filtrado. |
-| 2 | *"¿Cómo migro las rutas de Flask de un solo archivo a Blueprints sin romper la app?"* | Crear `src/api/routes/` con `similarity.py`, `patterns.py`, `dashboard.py`. Cada uno con `Blueprint()` y registro en `gateway.py` via `app.register_blueprint()`. El `static_folder` debe apuntar a `../static` relativo al gateway. |
+| 2 | *"¿Cómo migro las rutas de Flask de un solo archivo a Blueprints sin romper la app? Стартовый текст" `  `*`  `| Crear `src/api/routes/` con `similarity.py`, `patterns.py`, `dashboard.py`. Cada uno con `Blueprint()` y registro en `gateway.py` via `app.register_blueprint()`. El `static_folder` debe apuntar a `../static` relativo al gateway. |
 | 3 | *"¿Por qué el DTW explota en memoria con series de 5000 puntos?"* | La matriz completa es O(n²). Agregar `full_matrix=False` para mantener solo 2 filas (O(m)). El flag debe aceptar `Optional[int]` para la ventana Sakoe-Chiba. |
 | 4 | *"Hay un KeyError potencial en comparator.py línea 69 cuando el campo sort_key no existe"* | Usar `r.get(sort_key, 0)` en vez de `r[sort_key]`. Además los contadores `comparison_count` y `swap_count` no se resetean entre runs; hay que asignarlos a 0 antes de cada `algorithm()`. |
 | 5 | *"El SMA del reporte técnico da valores incorrectos cuando hay None en la serie"* | No tratar None como 0.0. Llevar un `valid_count` acumulativo paralelo al `cumsum` y usarlo en el denominador: `actual = valid_count[i+1] - valid_count[i+1-window]`. Si `actual == 0`, retornar None. |
@@ -606,7 +648,7 @@ de fuentes externas (páginas web en español, documentación técnica) y no se 
 | 9 | *"El cosine retorna similarity > 1.0 por errores de punto flotante"* | Hacer clamp del valor retornado, no solo del input de `acos`. Usar `clamped = max(-1.0, min(1.0, similarity))` y retornar `clamped`. |
 | 10 | *"¿Cómo asegurar reproducibilidad con --force-download?"* | El flag debe skipear el caché de archivos CSV y forzar descarga + recleaning + reunificación completa. Agregar `--use-scraper` opcional para cambiar entre API y BeautifulSoup. |
 | 11 | *"Yahoo Finance rate limita mucho. ¿Cómo hacer un sistema multi-fuente con fallback?"* | Crear interfaz abstracta `DataProvider`, implementar 5 providers (Tiingo, Yahoo, Alpha Vantage, Web Scraper, Binance). `MultiSourceFetcher` orquesta el fallback automático. |
-| 12 | *"El scraper de Investing.com ya no funciona. ¿Cómo añadir StockAnalysis y Google Finance?"* | Refactorizar scraper monolítico a `ScraperProvider` con múltiples sitios encadenados. Cada sitio tiene su propio método `_try_sitio()` y se prueban en secuencia. |
+| 12 | *"El scraper de Investing.com ya no funciona. ¿Cómo añadir StockAnalysis y Google Finance?*" | Refactorizar scraper monolítico a `ScraperProvider` con múltiples sitios encadenados. Cada sitio tiene su propio método `_try_sitio()` y se prueban en secuencia. |
 | 13 | *"¿Cómo integrar Binance para los símbolos crypto del portafolio?"* | Crear `BinanceProvider` que usa `/api/v3/klines`. Detectar símbolos crypto y delegar directamente bypassando el Web Scraper. |
 
 ---

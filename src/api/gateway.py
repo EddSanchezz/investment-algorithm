@@ -21,6 +21,7 @@ Complejidad: O(1) para enrutamiento; la carga de datos (O(n)) está en data.py.
 
 from flask import Flask, jsonify, request, render_template
 import os
+import subprocess
 
 from src.api.data import get_records, comparator, volume_analyzer, unifier
 from src.api.routes.similarity import similarity_bp
@@ -102,6 +103,30 @@ def get_statistics():
     volume_stats: dict = volume_analyzer.get_volume_statistics(records)
 
     return jsonify({"dataset": stats, "volume": volume_stats})
+
+
+@app.route("/api/refresh-data", methods=["POST"])
+def refresh_data():
+    """
+    Inicia el proceso ETL de descarga y limpieza de datos en segundo plano.
+    Retorna inmediatamente sin esperar a que el ETL termine.
+    """
+    try:
+        # Iniciar el proceso main_runner.py en segundo plano
+        # La ruta del ejecutable de Python debe ser absoluta
+        # o estar en el PATH del sistema para un despliegue sin venv directo.
+        python_executable = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                           '..', '..', '.venv', 'Scripts', 'python.exe')
+        if not os.path.exists(python_executable):
+            # Fallback para entornos como Render donde Python ya está en el PATH
+            python_executable = 'python' 
+
+        subprocess.Popen([python_executable, '-m', 'src.services.main_runner', '--force-download'])
+        print("[*] ETL: Proceso de actualización de datos iniciado en segundo plano.")
+        return jsonify({"status": "success", "message": "Data refresh initiated. Please check logs for progress and refresh the page later to see updated data."}), 202
+    except Exception as e:
+        print(f"[!] ETL: Error al iniciar proceso de actualización de datos: {e}")
+        return jsonify({"status": "error", "message": f"Failed to initiate data refresh: {e}"}), 500
 
 
 # ─── HTML Pages ──────────────────────────────────────────────
