@@ -105,42 +105,6 @@ def list_symbols():
     return jsonify({"symbols": symbols, "market_map": market_map})
 
 
-@similarity_bp.route("/api/similarity/single", methods=["GET"])
-def single_symbol():
-    """
-    Retorna la serie de precios crudos de un único activo.
-
-    Parámetros query:
-        symbol (str): Símbolo del activo (ej: VOO)
-        window (int): Cantidad de puntos recientes (default: 252)
-    """
-    symbol: str = request.args.get("symbol", "").upper()
-    if not symbol:
-        return jsonify({"error": "Se requiere el parámetro symbol"}), 400
-
-    records: list = get_records()
-    if not records:
-        return jsonify({"error": "No hay datos disponibles. Ejecute el pipeline ETL primero."}), 404
-
-    window = request.args.get("window", 252, type=int)
-    price_map: dict = {}
-    for r in records:
-        if r["symbol"] == symbol and r.get("close") is not None:
-            price_map[r["date"]] = r["close"]
-
-    dates = sorted(price_map.keys())
-    if window and len(dates) > window:
-        dates = dates[-window:]
-
-    prices = [price_map[d] for d in dates]
-    return jsonify({
-        "symbol": symbol.upper(),
-        "dates": dates,
-        "prices": prices,
-        "count": len(dates),
-    })
-
-
 @similarity_bp.route("/api/correlation-matrix", methods=["GET"])
 def correlation_matrix():
     """
