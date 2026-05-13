@@ -11,9 +11,9 @@ El análisis financiero moderno depende de la capacidad computacional para proce
 
 El sistema se compone de cinco módulos principales:
 1. **ETL**: Extracción, limpieza y unificación automatizada de datos financieros
-2. **Similitud**: 4 algoritmos de comparación entre series temporales
-3. **Patrones y Volatilidad**: Detección de patrones por ventana deslizante y clasificación de riesgo
-4. **Dashboard**: Visualizaciones interactivas y reporte PDF exportable
+2. **Similitud**: 4 algoritmos de comparación entre pares y grupos de activos
+3. **Patrones y Volatilidad**: Detección de rachas, gaps, breakouts y clasificación de riesgo
+4. **Dashboard**: Visualizaciones interactivas, fórmulas matemáticas renderizadas y reporte PDF exportable
 5. **API REST**: Despliegue como aplicación web con documentación completa
 
 ---
@@ -39,8 +39,8 @@ investment-algorithm/
 │   │       ├── base.html           # Layout base con navegación
 │   │       └── pages/
 │   │           ├── index.html      # Landing con estadísticas
-│   │           ├── similarity.html # Comparación interactiva de similitud
-│   │           ├── patterns.html   # Detección de patrones
+│   │           ├── similarity.html # Comparación interactiva por pares y grupos
+│   │           ├── patterns.html   # Detección de rachas, gaps y breakouts
 │   │           ├── risk.html       # Ranking de riesgo por volatilidad
 │   │           └── dashboard.html  # Dashboard completo + exportación PDF
 │   ├── etl/

@@ -13,6 +13,7 @@ Cada algoritmo incluye:
 - Análisis de complejidad computacional (Big-O)
 """
 
+from itertools import combinations
 from typing import List, Dict, Tuple, Optional
 from src.services.similarity.euclidean import euclidean_distance
 from src.services.similarity.pearson import pearson_correlation
@@ -93,8 +94,77 @@ class SimilarityAnalyzer:
             return []
         return [(prices[i] - prices[i - 1]) / prices[i - 1] for i in range(1, len(prices))]
 
+    @staticmethod
+    def _unique_symbols(symbols: List[str]) -> List[str]:
+        unique = []
+        seen = set()
+        for symbol in symbols:
+            upper = symbol.upper()
+            if upper not in seen:
+                seen.add(upper)
+                unique.append(upper)
+        return unique
+
+    @staticmethod
+    def _slice_tail(*series: List, max_points: Optional[int] = None) -> Tuple[List, ...]:
+        if max_points is None or max_points <= 0:
+            return tuple(series)
+        return tuple(s[-max_points:] if len(s) > max_points else s for s in series)
+
+    @staticmethod
+    def _build_symbol_price_maps(records: List[Dict], symbols: List[str]) -> Dict[str, Dict[str, float]]:
+        symbol_maps = {symbol: {} for symbol in symbols}
+        valid_symbols = set(symbols)
+
+        for record in records:
+            symbol = record["symbol"].upper()
+            close = record.get("close")
+            if symbol not in valid_symbols or close is None:
+                continue
+            symbol_maps[symbol][record["date"]] = close
+
+        return symbol_maps
+
+    @staticmethod
+    def _normalize_series(prices: List[Optional[float]]) -> List[Optional[float]]:
+        base = next((price for price in prices if price not in (None, 0)), None)
+        if base is None:
+            return [None for _ in prices]
+        return [round((price / base) * 100, 4) if price is not None else None for price in prices]
+
+    def _build_group_series(
+        self,
+        records: List[Dict],
+        symbols: List[str],
+        max_points: Optional[int] = None,
+    ) -> Dict:
+        symbol_maps = self._build_symbol_price_maps(records, symbols)
+        all_dates = sorted({date for prices in symbol_maps.values() for date in prices})
+        if max_points is not None and max_points > 0 and len(all_dates) > max_points:
+            all_dates = all_dates[-max_points:]
+
+        series = {"dates": all_dates}
+        normalized = {"dates": all_dates}
+        coverage = {}
+
+        for symbol in symbols:
+            values = [symbol_maps[symbol].get(date) for date in all_dates]
+            series[symbol] = values
+            normalized[symbol] = self._normalize_series(values)
+            coverage[symbol] = sum(value is not None for value in values)
+
+        return {
+            "series": series,
+            "normalized_series": normalized,
+            "coverage": coverage,
+        }
+
     def compare(
-        self, records: List[Dict], symbol1: str, symbol2: str
+        self,
+        records: List[Dict],
+        symbol1: str,
+        symbol2: str,
+        max_points: Optional[int] = None,
     ) -> Dict:
         """
         Calcula las 4 métricas de similitud entre dos activos.
@@ -119,6 +189,9 @@ class SimilarityAnalyzer:
             }
 
         prices1, prices2, dates = result
+        prices1, prices2, dates = self._slice_tail(
+            prices1, prices2, dates, max_points=max_points
+        )
         returns1 = self._returns(prices1)
         returns2 = self._returns(prices2)
 
@@ -139,6 +212,74 @@ class SimilarityAnalyzer:
         results["cosine"] = cosine_similarity(returns1, returns2)
 
         return results
+
+    def compare_many(
+        self,
+        records: List[Dict],
+        symbols: List[str],
+        max_points: int = 252,
+    ) -> Dict:
+        symbols = self._unique_symbols(symbols)
+        if len(symbols) < 2:
+            return {
+                "error": "Seleccione al menos 2 activos para comparar.",
+                "symbols": symbols,
+            }
+
+        group_series = self._build_group_series(records, symbols, max_points=max_points)
+        dates = group_series["series"].get("dates", [])
+        if len(dates) < 2:
+            return {
+                "error": "No hay suficientes fechas para construir una comparación multi-activo.",
+                "symbols": symbols,
+            }
+
+        pairwise = []
+        matrix_index = {symbol: index for index, symbol in enumerate(symbols)}
+        matrix = [[1.0 if i == j else 0.0 for j in range(len(symbols))] for i in range(len(symbols))]
+
+        for symbol1, symbol2 in combinations(symbols, 2):
+            comparison = self.compare(
+                records,
+                symbol1,
+                symbol2,
+                max_points=max_points,
+            )
+            if "error" in comparison:
+                continue
+
+            pair = {
+                "pair": f"{symbol1}-{symbol2}",
+                "symbol1": symbol1,
+                "symbol2": symbol2,
+                "common_dates": comparison["common_dates"],
+                "euclidean_distance": comparison["euclidean"].get("distance"),
+                "pearson_correlation": comparison["pearson"].get("correlation"),
+                "dtw_normalized_distance": comparison["dtw"].get("normalized_distance"),
+                "cosine_similarity": comparison["cosine"].get("similarity"),
+            }
+            pairwise.append(pair)
+
+            correlation = pair["pearson_correlation"]
+            if correlation is not None:
+                i = matrix_index[symbol1]
+                j = matrix_index[symbol2]
+                matrix[i][j] = round(correlation, 4)
+                matrix[j][i] = matrix[i][j]
+
+        return {
+            "mode": "group",
+            "symbols": symbols,
+            "window_points": max_points,
+            "series": group_series["series"],
+            "normalized_series": group_series["normalized_series"],
+            "coverage": group_series["coverage"],
+            "pairwise": pairwise,
+            "correlation_matrix": {
+                "symbols": symbols,
+                "matrix": matrix,
+            },
+        }
 
     def compute_correlation_matrix(
         self, records: List[Dict], symbols: List[str]

@@ -76,16 +76,23 @@
   <div class="card">
     <div class="form-row">
       <div class="form-group">
-        <label for="simS1">Activo 1</label>
-        <select id="simS1"></select>
-      </div>
-      <div class="form-group">
-        <label for="simS2">Activo 2</label>
-        <select id="simS2"></select>
+        <label for="simWindow">Ventana reciente</label>
+        <select id="simWindow">
+          <option value="90">90 días</option>
+          <option value="180">180 días</option>
+          <option value="252" selected>252 días</option>
+          <option value="504">504 días</option>
+        </select>
       </div>
       <button class="btn" onclick="loadSimilarity()">Comparar</button>
+      <button class="btn-tertiary" onclick="selectDashboardSymbols(2)">Seleccionar 2</button>
+      <button class="btn-tertiary" onclick="selectDashboardSymbols()">Seleccionar todos</button>
+      <button class="btn-tertiary" onclick="clearDashboardSymbols()">Limpiar</button>
     </div>
+    <p class="selection-summary" id="simSelectionSummary">Seleccione al menos 2 activos.</p>
+    <div class="selection-grid" id="simSymbolGrid"></div>
   </div>
+  <div id="simErrorBox" style="display:none;" class="inline-error"></div>
   <div class="grid-2" id="simMetricCards"></div>
   <div class="card">
     <h2>Comparación de Enfoques</h2>
@@ -141,7 +148,7 @@
     </div>
   </div>
   <div class="card">
-    <h2>Comparación de Precios</h2>
+    <h2 id="simChartTitle">Comparación de Precios</h2>
     <div class="chart-container"><canvas id="simChart"></canvas></div>
   </div>
   <div class="card">
@@ -162,7 +169,11 @@
         <label for="patType">Patrón</label>
         <select id="patType">
           <option value="consecutive_up">Días Consecutivos al Alza</option>
+          <option value="consecutive_down">Días Consecutivos a la Baja</option>
           <option value="gap_up">Gap Up</option>
+          <option value="gap_down">Gap Down</option>
+          <option value="breakout_up">Breakout Alcista</option>
+          <option value="breakout_down">Breakout Bajista</option>
         </select>
       </div>
       <div class="form-group" id="patMinDaysGroup">
@@ -172,6 +183,10 @@
       <div class="form-group" id="patThresholdGroup" style="display:none;">
         <label for="patThreshold">Umbral Gap (%)</label>
         <input type="number" id="patThreshold" value="2" min="0.5" max="20" step="0.5">
+      </div>
+      <div class="form-group" id="patWindowGroup" style="display:none;">
+        <label for="patWindow">Ventana breakout</label>
+        <input type="number" id="patWindow" value="20" min="5" max="120">
       </div>
       <button class="btn" onclick="loadPatterns()">Analizar</button>
     </div>
@@ -278,6 +293,10 @@ let charts = {};
 function destroyAllCharts() {
   Object.values(charts).forEach(c => { if (c) c.destroy(); });
   charts = {};
+  [
+    'simChart', 'riskDoughnutChart', 'riskBarChart', 'patChart', 'volumeChart',
+    'benchChart', 'benchOpsChart'
+  ].forEach(id => destroyChart(id));
 }
 
 // ─── TAB SYSTEM ───
@@ -311,6 +330,29 @@ document.addEventListener('DOMContentLoaded', () => loadTab('resumen'));
 
 // ─── FIND COMMON SYMBOLS FOR ALL SELECTORS ───
 let allSymbols = [];
+const similarityPalette = ['#6c63ff', '#22c55e', '#ef4444', '#0ea5e9', '#f59e0b', '#8b5cf6', '#14b8a6', '#ec4899'];
+const similarityFormulaGuide = [
+  {
+    title: 'Distancia Euclidiana',
+    formula: '$d(x,y) = \\sqrt{\\frac{1}{n}\\sum_{i=1}^{n}(x_i - y_i)^2}$',
+    note: 'Compara distancias absolutas punto a punto.'
+  },
+  {
+    title: 'Correlación de Pearson',
+    formula: '$r = \\frac{\\sum(x_i - \\bar{x})(y_i - \\bar{y})}{\\sqrt{\\sum(x_i - \\bar{x})^2 \\cdot \\sum(y_i - \\bar{y})^2}}$',
+    note: 'Mide relación lineal entre retornos.'
+  },
+  {
+    title: 'Dynamic Time Warping',
+    formula: '$DTW(x,y) = \\min_{\\pi} \\sum_{(i,j)\\in\\pi} |x_i - y_j|$',
+    note: 'Tolera desfases temporales y warping.'
+  },
+  {
+    title: 'Similitud por Coseno',
+    formula: '$cos(\\theta) = \\frac{x \\cdot y}{||x|| \\cdot ||y||}$',
+    note: 'Compara orientación de los retornos.'
+  },
+];
 
 async function getSymbols() {
   if (allSymbols.length) return allSymbols;
@@ -371,6 +413,81 @@ async function fetchJSON(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
+}
+
+function renderSimilarityGuideHTML() {
+  return similarityFormulaGuide.map(item => `
+    <div class="metric-card">
+      <h4>${item.title}</h4>
+      <div class="math-formula">${item.formula}</div>
+      <p class="formula-note">${item.note}</p>
+    </div>
+  `).join('');
+}
+
+function showDashboardSimilarityError(message) {
+  const box = document.getElementById('simErrorBox');
+  box.textContent = message;
+  box.style.display = 'block';
+}
+
+function clearDashboardSimilarityError() {
+  const box = document.getElementById('simErrorBox');
+  box.textContent = '';
+  box.style.display = 'none';
+}
+
+function getDashboardSelectedSymbols() {
+  return [...document.querySelectorAll('#simSymbolGrid input[type="checkbox"]:checked')]
+    .map(input => input.value);
+}
+
+function syncDashboardSymbolSelection() {
+  document.querySelectorAll('#simSymbolGrid .selection-chip').forEach(chip => {
+    const input = chip.querySelector('input');
+    chip.classList.toggle('is-selected', !!input.checked);
+  });
+
+  const selected = getDashboardSelectedSymbols();
+  document.getElementById('simSelectionSummary').textContent =
+    selected.length
+      ? `${selected.length} activo(s) seleccionados: ${selected.join(', ')}`
+      : 'Seleccione al menos 2 activos.';
+}
+
+function selectDashboardSymbols(limit = null) {
+  const checkboxes = [...document.querySelectorAll('#simSymbolGrid input[type="checkbox"]')];
+  checkboxes.forEach((checkbox, index) => {
+    checkbox.checked = limit == null ? true : index < limit;
+  });
+  syncDashboardSymbolSelection();
+}
+
+function clearDashboardSymbols() {
+  document.querySelectorAll('#simSymbolGrid input[type="checkbox"]').forEach(checkbox => {
+    checkbox.checked = false;
+  });
+  syncDashboardSymbolSelection();
+}
+
+function renderSimilarityCorrelationTable(symbols, matrix) {
+  let html = '<tr><th>Activo</th>';
+  symbols.forEach(symbol => { html += `<th>${symbol}</th>`; });
+  html += '</tr>';
+
+  symbols.forEach((symbol, rowIndex) => {
+    html += `<tr><td><strong>${symbol}</strong></td>`;
+    matrix[rowIndex].forEach(value => {
+      const magnitude = Math.min(Math.abs(value), 1);
+      let background = '#f3f4f6';
+      if (value > 0) background = `rgba(37, 99, 235, ${0.12 + magnitude * 0.68})`;
+      else if (value < 0) background = `rgba(220, 38, 38, ${0.12 + magnitude * 0.68})`;
+      const color = magnitude > 0.6 ? '#fff' : '#1a1a2e';
+      html += `<td style="background:${background}; color:${color}; text-align:center; font-weight:${magnitude > 0.7 ? 'bold' : 'normal'};">${value.toFixed(2)}</td>`;
+    });
+    html += '</tr>';
+  });
+  return html;
 }
 
 // ─── TAB: RESUMEN ───
@@ -519,7 +636,7 @@ async function loadRisk() {
     formulaCard.style.display = 'block';
     formulaCard.innerHTML = `
       <h4 style="margin:0 0 6px 0; font-size:14px;">Fórmula de Volatilidad Anualizada</h4>
-      <div class="metric-formula" style="background:#f3f4f6; padding:10px 14px; border-radius:6px; margin:0 0 6px 0; font-family:'Courier New',monospace; font-size:13px; color:#374151; overflow-x:auto; white-space:nowrap;">${volFormula}</div>
+      <div class="math-formula">${volFormula}</div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         ${complexityBadge(data.complexity || 'O(s × n + s log s)')}
         <span style="font-size:12px; color:#6b7280;">Complejidad del ranking completo del portafolio</span>
@@ -577,6 +694,7 @@ async function loadRisk() {
     </tr>`;
   });
   document.getElementById('riskTable').innerHTML = html;
+  renderMath(document.getElementById('tab-risk'));
 }
 
 // ─── TAB: SIMILITUD ───
@@ -584,81 +702,133 @@ let simChartInstance = null;
 
 async function loadSymbolSelectors() {
   const symbols = await getSymbols();
+  const grid = document.getElementById('simSymbolGrid');
+  grid.innerHTML = symbols.map((symbol, index) => `
+    <label class="selection-chip ${index < 2 ? 'is-selected' : ''}">
+      <input type="checkbox" value="${symbol}" ${index < 2 ? 'checked' : ''}>
+      <span>${symbol}</span>
+    </label>
+  `).join('');
+
+  grid.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    input.addEventListener('change', syncDashboardSymbolSelection);
+  });
+  syncDashboardSymbolSelection();
+
   if (symbols.length >= 2) {
-    populateSelect('simS1', symbols, symbols[0]);
-    populateSelect('simS2', symbols, symbols.length > 1 ? symbols[1] : symbols[0]);
     await loadSimilarity();
   }
 }
 
 async function loadSimilarity() {
-  const s1 = document.getElementById('simS1').value;
-  const s2 = document.getElementById('simS2').value;
-  if (!s1 || !s2 || s1 === s2) return;
-
-  const data = await fetchJSON(`/api/similarity?s1=${s1}&s2=${s2}`);
-
-  // Metric cards with formulas
-  const eu = data.euclidean || {};
-  const pe = data.pearson || {};
-  const dt = data.dtw || {};
-  const co = data.cosine || {};
-  const simAlgs = [
-    { key: 'euclidean', title: eu.description || 'Distancia Euclidiana', val: eu.distance != null ? eu.distance.toFixed(6) : '-', formula: eu.formula || '', complexity: eu.complexity || 'O(n)', interp: eu.interpretation || '', extra: `${data.common_dates || 0} puntos` },
-    { key: 'pearson', title: pe.description || 'Correlación de Pearson', val: pe.correlation != null ? pe.correlation.toFixed(4) : '-', formula: pe.formula || '', complexity: pe.complexity || 'O(n)', interp: pe.interpretation || '', extra: `Cov: ${pe.covariance != null ? pe.covariance.toFixed(6) : '-'}` },
-    { key: 'dtw', title: dt.description || 'DTW', val: dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-', formula: dt.formula || '', complexity: dt.complexity || 'O(n×m)', interp: dt.interpretation || '', extra: `Path: ${dt.path_length || 0} pasos` },
-    { key: 'cosine', title: co.description || 'Similitud por Coseno', val: co.similarity != null ? co.similarity.toFixed(4) : '-', formula: co.formula || '', complexity: co.complexity || 'O(n)', interp: co.interpretation || '', extra: `Ángulo: ${co.angle_degrees != null ? co.angle_degrees.toFixed(2) + '°' : '-'}` },
-  ];
-  document.getElementById('simMetricCards').innerHTML = simAlgs.map(a => `
-    <div class="metric-card">
-      <h4>${a.title}</h4>
-      <div class="metric-value" style="font-size:${a.val.length > 10 ? '16px' : '22px'};">${a.val}</div>
-      <div class="metric-formula" style="background:#f3f4f6; padding:8px 10px; border-radius:6px; margin:8px 0; font-family:'Courier New',monospace; font-size:12px; color:#374151; overflow-x:auto; white-space:nowrap;">${a.formula}</div>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px;">
-        ${complexityBadge(a.complexity)}
-        <span style="font-size:11px; color:#6b7280;">${a.extra}</span>
-      </div>
-      <div style="margin-top:6px; font-size:11px; color:#6b7280; line-height:1.4;">${a.interp.substring(0, 120)}${a.interp.length > 120 ? '...' : ''}</div>
-    </div>
-  `).join('');
-
-  // Price chart
-  const series = data.series || {};
-  const dates = series.dates || [];
-  const prices1 = series[s1] || [];
-  const prices2 = series[s2] || [];
-
-  if (simChartInstance) simChartInstance.destroy();
-  const ctx = document.getElementById('simChart');
-  if (ctx && dates.length) {
-    simChartInstance = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: dates,
-        datasets: [
-          { label: s1, data: prices1, borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.1)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y' },
-          { label: s2, data: prices2, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y' },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { intersect: false, mode: 'index' },
-        plugins: { legend: { position: 'top' }, title: { display: true, text: `${s1} vs ${s2} — Precios Históricos` } },
-        scales: { x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } }, y: { beginAtZero: false } }
-      }
-    });
+  clearDashboardSimilarityError();
+  const selected = getDashboardSelectedSymbols();
+  const windowPoints = document.getElementById('simWindow').value;
+  if (selected.length < 2) {
+    showDashboardSimilarityError('Seleccione al menos 2 activos.');
+    document.getElementById('simMetricCards').innerHTML = '';
+    document.getElementById('simTable').innerHTML = '';
+    document.getElementById('simChartTitle').textContent = 'Comparación de Precios';
+    destroyChart('simChart');
+    return;
   }
 
-  // Detailed table
-  let thtml = `<tr><th>Algoritmo</th><th>Complejidad</th><th>Valor</th><th>Interpretación</th></tr>`;
-  const addRow = (name, complexity, value, interp) => {
-    thtml += `<tr><td><strong>${name}</strong></td><td>${complexityBadge(complexity)}</td><td style="font-weight:600;">${value}</td><td style="font-size:11px; color:#6b7280;">${interp || ''}</td></tr>`;
-  };
-  addRow('Euclidiana', eu.complexity || 'O(n)', eu.distance != null ? eu.distance.toFixed(6) : '-', eu.interpretation);
-  addRow('Pearson', pe.complexity || 'O(n)', pe.correlation != null ? pe.correlation.toFixed(4) : '-', pe.interpretation);
-  addRow('DTW', dt.complexity || 'O(n×m)', dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-', dt.interpretation);
-  addRow('Coseno', co.complexity || 'O(n)', co.similarity != null ? co.similarity.toFixed(4) : '-', co.interpretation);
+  if (selected.length === 2) {
+    const [s1, s2] = selected;
+    const data = await fetchJSON(`/api/similarity?s1=${s1}&s2=${s2}&window=${windowPoints}`);
+    const eu = data.euclidean || {};
+    const pe = data.pearson || {};
+    const dt = data.dtw || {};
+    const co = data.cosine || {};
+    const simAlgs = [
+      { title: eu.description || 'Distancia Euclidiana', val: eu.distance != null ? eu.distance.toFixed(6) : '-', formula: eu.formula || '', complexity: eu.complexity || 'O(n)', interp: eu.interpretation || '', extra: `${data.common_dates || 0} puntos` },
+      { title: pe.description || 'Correlación de Pearson', val: pe.correlation != null ? pe.correlation.toFixed(4) : '-', formula: pe.formula || '', complexity: pe.complexity || 'O(n)', interp: pe.interpretation || '', extra: `Cov: ${pe.covariance != null ? pe.covariance.toFixed(6) : '-'}` },
+      { title: dt.description || 'DTW', val: dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-', formula: dt.formula || '', complexity: dt.complexity || 'O(n×m)', interp: dt.interpretation || '', extra: `Path: ${dt.path_length || 0} pasos` },
+      { title: co.description || 'Similitud por Coseno', val: co.similarity != null ? co.similarity.toFixed(4) : '-', formula: co.formula || '', complexity: co.complexity || 'O(n)', interp: co.interpretation || '', extra: `Ángulo: ${co.angle_degrees != null ? co.angle_degrees.toFixed(2) + '°' : '-'}` },
+    ];
+    document.getElementById('simMetricCards').innerHTML = simAlgs.map(a => `
+      <div class="metric-card">
+        <h4>${a.title}</h4>
+        <div class="metric-value" style="font-size:${a.val.length > 10 ? '16px' : '22px'};">${a.val}</div>
+        <div class="math-formula">${a.formula}</div>
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+          ${complexityBadge(a.complexity)}
+          <span style="font-size:11px; color:#6b7280;">${a.extra}</span>
+        </div>
+        <div style="margin-top:6px; font-size:11px; color:#6b7280; line-height:1.4;">${a.interp.substring(0, 120)}${a.interp.length > 120 ? '...' : ''}</div>
+      </div>
+    `).join('');
+
+    const series = data.series || {};
+    document.getElementById('simChartTitle').textContent = `Comparación de ${s1} vs ${s2}`;
+    simChartInstance = createLineChart(
+      'simChart',
+      series.dates || [],
+      [
+        { label: s1, data: series[s1] || [], color: '#6c63ff' },
+        { label: s2, data: series[s2] || [], color: '#22c55e' },
+      ],
+      `${s1} vs ${s2} — Precios Históricos`
+    );
+
+    let thtml = `<tr><th>Algoritmo</th><th>Complejidad</th><th>Valor</th><th>Interpretación</th></tr>`;
+    const addRow = (name, complexity, value, interp) => {
+      thtml += `<tr><td><strong>${name}</strong></td><td>${complexityBadge(complexity)}</td><td style="font-weight:600;">${value}</td><td style="font-size:11px; color:#6b7280;">${interp || ''}</td></tr>`;
+    };
+    addRow('Euclidiana', eu.complexity || 'O(n)', eu.distance != null ? eu.distance.toFixed(6) : '-', eu.interpretation);
+    addRow('Pearson', pe.complexity || 'O(n)', pe.correlation != null ? pe.correlation.toFixed(4) : '-', pe.interpretation);
+    addRow('DTW', dt.complexity || 'O(n×m)', dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-', dt.interpretation);
+    addRow('Coseno', co.complexity || 'O(n)', co.similarity != null ? co.similarity.toFixed(4) : '-', co.interpretation);
+    thtml += `<tr><td colspan="4"><div class="formula-guide">${renderSimilarityGuideHTML()}</div></td></tr>`;
+    document.getElementById('simTable').innerHTML = thtml;
+    renderMath(document.getElementById('tab-similarity'));
+    return;
+  }
+
+  const params = new URLSearchParams();
+  selected.forEach(symbol => params.append('symbols', symbol));
+  params.append('window', windowPoints);
+  const data = await fetchJSON(`/api/similarity/group?${params.toString()}`);
+  const pairwise = data.pairwise || [];
+  const corr = data.correlation_matrix || { symbols: [], matrix: [] };
+  const strongestPearson = [...pairwise].filter(p => p.pearson_correlation != null).sort((a, b) => b.pearson_correlation - a.pearson_correlation)[0];
+  const lowestDtw = [...pairwise].filter(p => p.dtw_normalized_distance != null).sort((a, b) => a.dtw_normalized_distance - b.dtw_normalized_distance)[0];
+
+  document.getElementById('simMetricCards').innerHTML = `
+    <div class="metric-card"><h4>Activos</h4><div class="metric-value">${selected.length}</div><div class="metric-sub">Ventana de ${data.window_points || windowPoints} puntos</div></div>
+    <div class="metric-card"><h4>Pares evaluados</h4><div class="metric-value">${pairwise.length}</div><div class="metric-sub">Todas las combinaciones del grupo</div></div>
+    <div class="metric-card"><h4>Pearson Máximo</h4><div class="metric-value">${strongestPearson && strongestPearson.pearson_correlation != null ? strongestPearson.pearson_correlation.toFixed(4) : '-'}</div><div class="metric-sub">${strongestPearson ? strongestPearson.pair : 'Sin datos'}</div></div>
+    <div class="metric-card"><h4>DTW Más Bajo</h4><div class="metric-value">${lowestDtw && lowestDtw.dtw_normalized_distance != null ? lowestDtw.dtw_normalized_distance.toFixed(4) : '-'}</div><div class="metric-sub">${lowestDtw ? lowestDtw.pair : 'Sin datos'}</div></div>
+  `;
+
+  document.getElementById('simChartTitle').textContent = 'Serie Normalizada Base 100';
+  const normalized = data.normalized_series || { dates: [] };
+  simChartInstance = createLineChart(
+    'simChart',
+    normalized.dates || [],
+    selected.map((symbol, index) => ({
+      label: symbol,
+      data: normalized[symbol] || [],
+      color: similarityPalette[index % similarityPalette.length],
+    })),
+    `Comparación multi-activo (${selected.join(', ')})`
+  );
+
+  let thtml = `<tr><th>Par</th><th>Fechas Comunes</th><th>Pearson</th><th>Coseno</th><th>Euclidiana</th><th>DTW</th></tr>`;
+  pairwise.forEach(pair => {
+    thtml += `<tr>
+      <td><strong>${pair.pair}</strong></td>
+      <td>${pair.common_dates || 0}</td>
+      <td>${pair.pearson_correlation != null ? pair.pearson_correlation.toFixed(4) : '-'}</td>
+      <td>${pair.cosine_similarity != null ? pair.cosine_similarity.toFixed(4) : '-'}</td>
+      <td>${pair.euclidean_distance != null ? pair.euclidean_distance.toFixed(4) : '-'}</td>
+      <td>${pair.dtw_normalized_distance != null ? pair.dtw_normalized_distance.toFixed(4) : '-'}</td>
+    </tr>`;
+  });
+  thtml += `<tr><td colspan="6"><div class="table-scroll"><table>${renderSimilarityCorrelationTable(corr.symbols || [], corr.matrix || [])}</table></div></td></tr>`;
+  thtml += `<tr><td colspan="6"><div class="formula-guide">${renderSimilarityGuideHTML()}</div></td></tr>`;
   document.getElementById('simTable').innerHTML = thtml;
+  renderMath(document.getElementById('tab-similarity'));
 }
 
 // ─── TAB: PATRONES ───
@@ -670,19 +840,42 @@ async function loadPatSymbols() {
 }
 
 document.getElementById('patType').addEventListener('change', function() {
-  document.getElementById('patMinDaysGroup').style.display = this.value === 'consecutive_up' ? '' : 'none';
-  document.getElementById('patThresholdGroup').style.display = this.value === 'gap_up' ? '' : 'none';
+  const streakPatterns = ['consecutive_up', 'consecutive_down'];
+  const gapPatterns = ['gap_up', 'gap_down'];
+  const breakoutPatterns = ['breakout_up', 'breakout_down'];
+  document.getElementById('patMinDaysGroup').style.display = streakPatterns.includes(this.value) ? '' : 'none';
+  document.getElementById('patThresholdGroup').style.display = gapPatterns.includes(this.value) ? '' : 'none';
+  document.getElementById('patWindowGroup').style.display = breakoutPatterns.includes(this.value) ? '' : 'none';
 });
+
+function patternOccurrencesRows(occurrences) {
+  if (!occurrences.length) {
+    return '<tr><td colspan="6" class="text-muted text-center">Sin ocurrencias</td></tr>';
+  }
+
+  return occurrences.slice().reverse().map((occurrence, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${occurrence.date || '-'}</td>
+      <td>${occurrence.start_date || '-'}</td>
+      <td>${occurrence.end_date || '-'}</td>
+      <td>${occurrence.duration || occurrence.window || '-'}</td>
+      <td>${occurrence.change_pct != null ? occurrence.change_pct.toFixed(2) + '%' : occurrence.gap_pct != null ? occurrence.gap_pct.toFixed(2) + '%' : '-'}</td>
+    </tr>
+  `).join('');
+}
 
 async function loadPatterns() {
   const symbol = document.getElementById('patSymbol').value;
   const type = document.getElementById('patType').value;
   const minDays = document.getElementById('patMinDays').value;
   const threshold = document.getElementById('patThreshold').value / 100;
+  const window = document.getElementById('patWindow').value;
 
   let url = `/api/patterns?symbol=${symbol}&pattern=${type}`;
-  if (type === 'consecutive_up') url += `&min_days=${minDays}`;
-  else url += `&threshold=${threshold}`;
+  if (['consecutive_up', 'consecutive_down'].includes(type)) url += `&min_days=${minDays}`;
+  else if (['gap_up', 'gap_down'].includes(type)) url += `&threshold=${threshold}`;
+  else url += `&window=${window}`;
 
   const data = await fetchJSON(url);
   const container = document.getElementById('patternResults');
@@ -702,15 +895,16 @@ async function loadPatterns() {
         <div class="pattern-stat-item"><div class="num">${totalOcc}</div><div class="desc">Ocurrencias Totales</div></div>
         <div class="pattern-stat-item"><div class="num">${data.records_analyzed || 0}</div><div class="desc">Registros Analizados</div></div>
         <div class="pattern-stat-item"><div class="num">${data.years ? data.years.toFixed(1) : '-'}</div><div class="desc">Años de Historia</div></div>
-        ${data.average_gap_pct ? `<div class="pattern-stat-item"><div class="num">${data.average_gap_pct.toFixed(2)}%</div><div class="desc">Gap Promedio</div></div>` : ''}
-        ${data.max_gap_pct ? `<div class="pattern-stat-item"><div class="num">${data.max_gap_pct.toFixed(2)}%</div><div class="desc">Gap Máximo</div></div>` : ''}
+        ${data.average_gap_pct !== undefined ? `<div class="pattern-stat-item"><div class="num">${data.average_gap_pct.toFixed(2)}%</div><div class="desc">Gap Promedio</div></div>` : ''}
+        ${data.max_gap_pct !== undefined ? `<div class="pattern-stat-item"><div class="num">${data.max_gap_pct.toFixed(2)}%</div><div class="desc">Gap Máximo</div></div>` : ''}
         ${data.min_days ? `<div class="pattern-stat-item"><div class="num">${data.min_days}</div><div class="desc">Días Mínimos</div></div>` : ''}
+        ${data.window ? `<div class="pattern-stat-item"><div class="num">${data.window}</div><div class="desc">Ventana</div></div>` : ''}
       </div>
       <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px;">
         ${complexityBadge(data.complexity)}
-        ${data.formula ? `<span class="badge badge-formula" style="background:#e0e7ff; color:#4338ca; font-size:11px; padding:4px 10px; border-radius:12px; font-family:'Courier New',monospace;">${data.formula}</span>` : ''}
       </div>
       <p class="section-desc" style="margin-top:8px;">${data.definition || data.algorithm || ''}</p>
+      ${data.formula ? `<div class="math-formula">${data.formula}</div>` : ''}
     </div>
     <div class="card">
       <h2>Frecuencia por Año</h2>
@@ -721,16 +915,7 @@ async function loadPatterns() {
       <div class="table-scroll">
         <table>
           <tr><th>#</th><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Días</th><th>Cambio %</th></tr>
-          ${lastOccs.length ? lastOccs.slice(0, 10).map((o, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${o.date || o.fecha || '-'}</td>
-              <td>${o.start_date || o.inicio || '-'}</td>
-              <td>${o.end_date || o.fin || '-'}</td>
-              <td>${o.duration || o.dias || o.count || '-'}</td>
-              <td>${o.change_pct || o.cambio || o.gap_pct ? (o.change_pct || o.cambio || o.gap_pct) : '-'}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="6" class="text-muted text-center">Sin ocurrencias</td></tr>'}
+          ${patternOccurrencesRows(lastOccs)}
         </table>
       </div>
     </div>
@@ -748,6 +933,8 @@ async function loadPatterns() {
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
     });
   }
+
+  renderMath(container);
 }
 
 // ─── TAB: TÉCNICO ───

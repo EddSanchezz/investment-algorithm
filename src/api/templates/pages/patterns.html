@@ -2,7 +2,7 @@
 {% block title %}Patrones{% endblock %}
 {% block content %}
 <h1>Detección de Patrones</h1>
-<p class="subtitle">Análisis de frecuencia de patrones mediante ventanas deslizantes.</p>
+<p class="subtitle">Explore patrones de rachas, gaps y breakouts con resultados persistentes y fórmulas matemáticas renderizadas.</p>
 
 <div class="card">
     <div class="form-row">
@@ -14,7 +14,11 @@
             <label for="pattern">Patrón</label>
             <select id="pattern">
                 <option value="consecutive_up">Días Consecutivos al Alza</option>
+                <option value="consecutive_down">Días Consecutivos a la Baja</option>
                 <option value="gap_up">Gap Up</option>
+                <option value="gap_down">Gap Down</option>
+                <option value="breakout_up">Breakout Alcista</option>
+                <option value="breakout_down">Breakout Bajista</option>
             </select>
         </div>
         <div class="form-group" id="minDaysGroup">
@@ -25,14 +29,21 @@
             <label for="threshold">Umbral (%)</label>
             <input type="number" id="threshold" value="2" min="0.5" max="10" step="0.5">
         </div>
+        <div class="form-group" id="windowGroup" style="display:none;">
+            <label for="window">Ventana breakout</label>
+            <input type="number" id="window" value="20" min="5" max="120">
+        </div>
         <button class="btn" onclick="detectPattern()">Detectar</button>
     </div>
 </div>
+
+<div id="errorBox" style="display:none;" class="inline-error"></div>
 
 <div id="results" style="display:none;">
     <div class="card">
         <h2 id="patternTitle">Resultados</h2>
         <p class="text-muted" id="patternDefinition"></p>
+        <div class="math-formula" id="patternFormula" style="display:none;"></div>
         <div class="grid-4" id="patternStats"></div>
     </div>
 
@@ -45,10 +56,12 @@
 
     <div class="card">
         <h2>Últimas Ocurrencias</h2>
-        <table>
-            <thead><tr><th>#</th><th>Fecha</th></tr></thead>
-            <tbody id="occurrencesTable"></tbody>
-        </table>
+        <div class="table-scroll">
+            <table>
+                <thead><tr><th>#</th><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Cambio</th></tr></thead>
+                <tbody id="occurrencesTable"></tbody>
+            </table>
+        </div>
     </div>
 
     <div class="card">
@@ -63,19 +76,57 @@
 <script>
 let patternChart = null;
 
-document.getElementById('pattern').addEventListener('change', function() {
-    const isGap = this.value === 'gap_up';
-    document.getElementById('minDaysGroup').style.display = isGap ? 'none' : 'block';
-    document.getElementById('thresholdGroup').style.display = isGap ? 'block' : 'none';
-});
+function showPatternError(message) {
+    const box = document.getElementById('errorBox');
+    box.textContent = message;
+    box.style.display = 'block';
+}
+
+function clearPatternError() {
+    const box = document.getElementById('errorBox');
+    box.textContent = '';
+    box.style.display = 'none';
+}
+
+function syncPatternControls() {
+    const value = document.getElementById('pattern').value;
+    const streakPatterns = ['consecutive_up', 'consecutive_down'];
+    const gapPatterns = ['gap_up', 'gap_down'];
+    const breakoutPatterns = ['breakout_up', 'breakout_down'];
+
+    document.getElementById('minDaysGroup').style.display = streakPatterns.includes(value) ? 'block' : 'none';
+    document.getElementById('thresholdGroup').style.display = gapPatterns.includes(value) ? 'block' : 'none';
+    document.getElementById('windowGroup').style.display = breakoutPatterns.includes(value) ? 'block' : 'none';
+}
+
+document.getElementById('pattern').addEventListener('change', syncPatternControls);
 
 async function loadSymbols() {
     try {
         const res = await fetch('/api/similarity/symbols');
         const data = await res.json();
         const sel = document.getElementById('symbol');
-        data.symbols.forEach(s => { sel.innerHTML += `<option value="${s}">${s}</option>`; });
-    } catch(e) {}
+        sel.innerHTML = data.symbols.map(symbol => `<option value="${symbol}">${symbol}</option>`).join('');
+    } catch (error) {
+        showPatternError('No fue posible cargar los símbolos disponibles.');
+    }
+}
+
+function occurrenceRows(occurrences) {
+    if (!occurrences.length) {
+        return '<tr><td colspan="6" class="text-muted text-center">Sin ocurrencias</td></tr>';
+    }
+
+    return occurrences.slice().reverse().map((occurrence, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${formatDate(occurrence.date || occurrence.end_date || '')}</td>
+            <td>${occurrence.start_date || '-'}</td>
+            <td>${occurrence.end_date || '-'}</td>
+            <td>${occurrence.duration || occurrence.window || '-'}</td>
+            <td>${occurrence.change_pct != null ? occurrence.change_pct.toFixed(2) + '%' : occurrence.gap_pct != null ? occurrence.gap_pct.toFixed(2) + '%' : '-'}</td>
+        </tr>
+    `).join('');
 }
 
 async function detectPattern() {
@@ -83,60 +134,91 @@ async function detectPattern() {
     const pattern = document.getElementById('pattern').value;
     const minDays = document.getElementById('minDays').value;
     const threshold = parseFloat(document.getElementById('threshold').value) / 100;
+    const window = document.getElementById('window').value;
     const loading = document.getElementById('loading');
     const results = document.getElementById('results');
 
+    clearPatternError();
     loading.style.display = 'block';
     results.style.display = 'none';
 
     const params = new URLSearchParams({ symbol, pattern });
-    if (pattern === 'consecutive_up') params.append('min_days', minDays);
-    else params.append('threshold', threshold);
+    if (['consecutive_up', 'consecutive_down'].includes(pattern)) {
+        params.append('min_days', minDays);
+    } else if (['gap_up', 'gap_down'].includes(pattern)) {
+        params.append('threshold', threshold);
+    } else {
+        params.append('window', window);
+    }
 
     try {
         const res = await fetch(`/api/patterns?${params}`);
         const data = await res.json();
 
-        if (data.error) { showError('results', data.error); loading.style.display = 'none'; return; }
+        if (data.error) {
+            showPatternError(data.error);
+            loading.style.display = 'none';
+            return;
+        }
 
-        document.getElementById('patternTitle').textContent =
-            `${data.pattern} — ${data.symbol}`;
+        document.getElementById('patternTitle').textContent = `${data.pattern} — ${data.symbol}`;
         document.getElementById('patternDefinition').textContent = data.definition || '';
 
+        const formula = document.getElementById('patternFormula');
+        if (data.formula) {
+            formula.style.display = 'block';
+            formula.innerHTML = data.formula;
+        } else {
+            formula.style.display = 'none';
+            formula.innerHTML = '';
+        }
+
         const stats = document.getElementById('patternStats');
-        stats.innerHTML = `
-            <div class="stat-card"><div class="value">${data.total_occurrences}</div><div class="label">Ocurrencias</div></div>
-            <div class="stat-card"><div class="value">${data.records_analyzed || '-'}</div><div class="label">Días Analizados</div></div>
-            <div class="stat-card"><div class="value">${Object.keys(data.by_year || {}).length}</div><div class="label">Años</div></div>
-            <div class="stat-card"><div class="value">${data.average_gap_pct !== undefined ? data.average_gap_pct + '%' : '-'}</div><div class="label">Gap Promedio</div></div>
-        `;
+        const cards = [
+            { label: 'Ocurrencias', value: data.total_occurrences },
+            { label: 'Registros Analizados', value: data.records_analyzed || '-' },
+            { label: 'Años', value: data.years != null ? data.years.toFixed(1) : '-' },
+            { label: 'Días Mínimos', value: data.min_days ?? '-' },
+            { label: 'Ventana', value: data.window ?? '-' },
+            { label: 'Gap Promedio', value: data.average_gap_pct !== undefined ? data.average_gap_pct.toFixed(2) + '%' : '-' },
+            { label: 'Gap Máximo', value: data.max_gap_pct !== undefined ? data.max_gap_pct.toFixed(2) + '%' : '-' },
+            { label: 'Años con Ocurrencias', value: Object.keys(data.by_year || {}).length },
+        ];
+        stats.innerHTML = cards.map(card => `
+            <div class="stat-card">
+                <div class="value">${card.value}</div>
+                <div class="label">${card.label}</div>
+            </div>
+        `).join('');
 
         renderPatternChart(data);
-        renderOccurrences(data);
+        document.getElementById('occurrencesTable').innerHTML = occurrenceRows(data.last_occurrences || []);
         document.getElementById('algorithmDesc').textContent = data.algorithm || '';
         document.getElementById('complexityBadge').textContent = data.complexity || '';
         results.style.display = 'block';
-    } catch(e) { showError('results', 'Error al detectar patrones'); }
+        await renderMath(results);
+    } catch (error) {
+        showPatternError('Error al detectar patrones.');
+    }
+
     loading.style.display = 'none';
 }
 
 function renderPatternChart(data) {
-    if (patternChart) patternChart.destroy();
     const byYear = data.by_year || {};
     const years = Object.keys(byYear).sort();
-    const counts = years.map(y => byYear[y]);
-    if (years.length === 0) return;
+    const counts = years.map(year => byYear[year]);
+
+    if (!years.length) {
+        destroyChart('patternChart');
+        patternChart = null;
+        return;
+    }
+
     patternChart = createBarChart('patternChart', years, counts, 'Ocurrencias', '#6c63ff');
 }
 
-function renderOccurrences(data) {
-    const dates = data.last_occurrences || [];
-    const tbody = document.getElementById('occurrencesTable');
-    tbody.innerHTML = dates.length === 0
-        ? '<tr><td colspan="2" class="text-muted">Sin ocurrencias</td></tr>'
-        : dates.map((d, i) => `<tr><td>${dates.length - i}</td><td>${formatDate(d)}</td></tr>`).reverse().join('');
-}
-
+syncPatternControls();
 loadSymbols();
 </script>
 {% endblock %}

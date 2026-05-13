@@ -164,8 +164,8 @@ class VolatilityAnalyzer:
             "risk_category": risk_category,
             "trading_days": self.TRADING_DAYS,
             "formula": (
-                "σ_anual = σ_diaria × √252\n"
-                "donde σ_diaria = √(Σ(r_i - r̄)² / (n-1))"
+                "$\\sigma_{anual} = \\sigma_{diaria} \\cdot \\sqrt{252}$ "
+                "con $\\sigma_{diaria} = \\sqrt{\\frac{\\sum (r_i - \\bar{r})^2}{n-1}}$"
             ),
             "complexity": "O(n)",
         }

@@ -2,183 +2,338 @@
 {% block title %}Similitud{% endblock %}
 {% block content %}
 <h1>Análisis de Similitud</h1>
-<p class="subtitle">Compare dos activos financieros usando 4 algoritmos de similitud diferentes.</p>
+<p class="subtitle">Compare 2 o más activos con gráficos multi-activo, matriz de correlación y detalle algorítmico cuando se selecciona un par.</p>
 
 <div class="card">
     <div class="form-row">
         <div class="form-group">
-            <label for="symbol1">Activo 1</label>
-            <select id="symbol1"></select>
+            <label for="windowPoints">Ventana reciente</label>
+            <select id="windowPoints">
+                <option value="90">90 días</option>
+                <option value="180">180 días</option>
+                <option value="252" selected>252 días</option>
+                <option value="504">504 días</option>
+            </select>
         </div>
-        <div class="form-group">
-            <label for="symbol2">Activo 2</label>
-            <select id="symbol2"></select>
-        </div>
-        <button class="btn" onclick="calculateSimilarity()">Calcular Similitud</button>
+        <button class="btn" onclick="loadSimilarity()">Comparar Selección</button>
+        <button class="btn-tertiary" onclick="selectFirstSymbols(2)">Seleccionar 2</button>
+        <button class="btn-tertiary" onclick="selectAllSymbols()">Seleccionar Todos</button>
+        <button class="btn-tertiary" onclick="clearSymbolSelection()">Limpiar</button>
     </div>
+    <p class="selection-summary" id="selectionSummary">Cargando activos...</p>
+    <div class="selection-grid" id="symbolGrid"></div>
 </div>
 
-<div id="results" style="display:none;">
-    <div class="card">
-        <h2>Precios Históricos</h2>
-        <div class="chart-container">
-            <canvas id="priceChart"></canvas>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>Resultados de Similitud</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Algoritmo</th>
-                    <th>Valor</th>
-                    <th>Interpretación</th>
-                    <th>Complejidad</th>
-                </tr>
-            </thead>
-            <tbody id="resultsTable"></tbody>
-        </table>
-    </div>
-
-    <div class="card">
-        <h2>Detalle de Algoritmos</h2>
-        <div id="algorithmDetails"></div>
-    </div>
-</div>
-
-<div id="loading" style="display:none;" class="text-center text-muted mb-4">Calculando...</div>
+<div id="errorBox" style="display:none;" class="inline-error"></div>
+<div id="results" class="section-stack"></div>
 
 <script>
-let priceChart = null;
+const similarityPalette = ['#6c63ff', '#22c55e', '#ef4444', '#0ea5e9', '#f59e0b', '#8b5cf6', '#14b8a6', '#ec4899'];
+
+const formulaGuide = [
+    {
+        title: 'Distancia Euclidiana',
+        formula: '$d(x,y) = \\sqrt{\\frac{1}{n}\\sum_{i=1}^{n}(x_i - y_i)^2}$',
+        note: 'Mide distancia punto a punto. Menor valor implica series más cercanas.'
+    },
+    {
+        title: 'Correlación de Pearson',
+        formula: '$r = \\frac{\\sum(x_i - \\bar{x})(y_i - \\bar{y})}{\\sqrt{\\sum(x_i - \\bar{x})^2 \\cdot \\sum(y_i - \\bar{y})^2}}$',
+        note: 'Mide relación lineal entre retornos. Va de -1 a +1.'
+    },
+    {
+        title: 'Dynamic Time Warping',
+        formula: '$DTW(x,y) = \\min_{\\pi} \\sum_{(i,j)\\in\\pi} |x_i - y_j|$',
+        note: 'Tolera desfases temporales y compara secuencias con warping.'
+    },
+    {
+        title: 'Similitud por Coseno',
+        formula: '$cos(\\theta) = \\frac{x \\cdot y}{||x|| \\cdot ||y||}$',
+        note: 'Compara dirección de los retornos sin depender de la escala absoluta.'
+    }
+];
+
+function showErrorBox(message) {
+    const box = document.getElementById('errorBox');
+    box.textContent = message;
+    box.style.display = 'block';
+}
+
+function clearErrorBox() {
+    const box = document.getElementById('errorBox');
+    box.textContent = '';
+    box.style.display = 'none';
+}
+
+function getSelectedSymbols() {
+    return [...document.querySelectorAll('#symbolGrid input[type="checkbox"]:checked')]
+        .map(input => input.value);
+}
+
+function syncSelectionStyles() {
+    document.querySelectorAll('#symbolGrid .selection-chip').forEach(chip => {
+        const input = chip.querySelector('input');
+        chip.classList.toggle('is-selected', !!input.checked);
+    });
+
+    const selected = getSelectedSymbols();
+    document.getElementById('selectionSummary').textContent =
+        selected.length
+            ? `${selected.length} activo(s) seleccionados: ${selected.join(', ')}`
+            : 'Seleccione al menos 2 activos para comparar.';
+}
+
+function selectFirstSymbols(count) {
+    const checkboxes = [...document.querySelectorAll('#symbolGrid input[type="checkbox"]')];
+    checkboxes.forEach((checkbox, index) => {
+        checkbox.checked = index < count;
+    });
+    syncSelectionStyles();
+}
+
+function selectAllSymbols() {
+    document.querySelectorAll('#symbolGrid input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    syncSelectionStyles();
+}
+
+function clearSymbolSelection() {
+    document.querySelectorAll('#symbolGrid input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    syncSelectionStyles();
+}
+
+function renderFormulaGuide() {
+    return `
+        <div class="card">
+            <h2>Guía Matemática</h2>
+            <div class="formula-guide">
+                ${formulaGuide.map(item => `
+                    <div class="metric-card">
+                        <h4>${item.title}</h4>
+                        <div class="math-formula">${item.formula}</div>
+                        <p class="formula-note">${item.note}</p>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderCorrelationTable(symbols, matrix) {
+    let html = '<table><thead><tr><th>Activo</th>';
+    symbols.forEach(symbol => {
+        html += `<th>${symbol}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    symbols.forEach((symbol, rowIndex) => {
+        html += `<tr><td><strong>${symbol}</strong></td>`;
+        matrix[rowIndex].forEach(value => {
+            const magnitude = Math.min(Math.abs(value), 1);
+            let background = '#f3f4f6';
+            if (value > 0) background = `rgba(37, 99, 235, ${0.12 + magnitude * 0.68})`;
+            if (value < 0) background = `rgba(220, 38, 38, ${0.12 + magnitude * 0.68})`;
+            const color = magnitude > 0.6 ? '#ffffff' : '#1a1a2e';
+            html += `<td style="background:${background}; color:${color}; text-align:center; font-weight:${magnitude > 0.7 ? 700 : 500};">${value.toFixed(2)}</td>`;
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    return html;
+}
+
+function renderPairMode(data) {
+    const eu = data.euclidean || {};
+    const pe = data.pearson || {};
+    const dt = data.dtw || {};
+    const co = data.cosine || {};
+
+    document.getElementById('results').innerHTML = `
+        <div class="insight-grid">
+            <div class="insight-card"><h4>Fechas Comunes</h4><div class="value">${data.common_dates || 0}</div><div class="meta">Ventana analizada para ${data.symbol1} y ${data.symbol2}</div></div>
+            <div class="insight-card"><h4>Pearson</h4><div class="value">${pe.correlation != null ? pe.correlation.toFixed(4) : '-'}</div><div class="meta">${pe.interpretation || ''}</div></div>
+            <div class="insight-card"><h4>DTW Normalizado</h4><div class="value">${dt.normalized_distance != null ? dt.normalized_distance.toFixed(4) : '-'}</div><div class="meta">${dt.interpretation || ''}</div></div>
+            <div class="insight-card"><h4>Coseno</h4><div class="value">${co.similarity != null ? co.similarity.toFixed(4) : '-'}</div><div class="meta">${co.interpretation || ''}</div></div>
+        </div>
+        <div class="card">
+            <h2>Precios Históricos</h2>
+            <p class="section-desc">Serie de precios de cierre alineada en fechas comunes.</p>
+            <div class="chart-container"><canvas id="priceChart"></canvas></div>
+        </div>
+        <div class="card">
+            <h2>Resultados Detallados</h2>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr><th>Algoritmo</th><th>Valor</th><th>Fórmula</th><th>Interpretación</th><th>Complejidad</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>Euclidiana</strong></td><td>${eu.distance != null ? eu.distance.toFixed(6) : '-'}</td><td><div class="math-formula">${eu.formula || ''}</div></td><td>${eu.interpretation || ''}</td><td><code>${eu.complexity || 'O(n)'}</code></td></tr>
+                        <tr><td><strong>Pearson</strong></td><td>${pe.correlation != null ? pe.correlation.toFixed(6) : '-'}</td><td><div class="math-formula">${pe.formula || ''}</div></td><td>${pe.interpretation || ''}</td><td><code>${pe.complexity || 'O(n)'}</code></td></tr>
+                        <tr><td><strong>DTW</strong></td><td>${dt.normalized_distance != null ? dt.normalized_distance.toFixed(6) : '-'}</td><td><div class="math-formula">${dt.formula || ''}</div></td><td>${dt.interpretation || ''}</td><td><code>${dt.complexity || 'O(n×m)'}</code></td></tr>
+                        <tr><td><strong>Coseno</strong></td><td>${co.similarity != null ? co.similarity.toFixed(6) : '-'}</td><td><div class="math-formula">${co.formula || ''}</div></td><td>${co.interpretation || ''}</td><td><code>${co.complexity || 'O(n)'}</code></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        ${renderFormulaGuide()}
+    `;
+
+    const series = data.series || {};
+    createLineChart(
+        'priceChart',
+        series.dates || [],
+        [
+            { label: data.symbol1, data: series[data.symbol1] || [], color: similarityPalette[0] },
+            { label: data.symbol2, data: series[data.symbol2] || [], color: similarityPalette[1] },
+        ],
+        `${data.symbol1} vs ${data.symbol2}`
+    );
+
+    renderMath(document.getElementById('results'));
+}
+
+function deriveGroupInsights(pairwise) {
+    const withPearson = pairwise.filter(pair => pair.pearson_correlation != null);
+    const withCosine = pairwise.filter(pair => pair.cosine_similarity != null);
+    const withEuclidean = pairwise.filter(pair => pair.euclidean_distance != null);
+    const withDtw = pairwise.filter(pair => pair.dtw_normalized_distance != null);
+
+    return {
+        strongestPearson: withPearson.sort((a, b) => b.pearson_correlation - a.pearson_correlation)[0],
+        strongestCosine: withCosine.sort((a, b) => b.cosine_similarity - a.cosine_similarity)[0],
+        lowestEuclidean: withEuclidean.sort((a, b) => a.euclidean_distance - b.euclidean_distance)[0],
+        lowestDtw: withDtw.sort((a, b) => a.dtw_normalized_distance - b.dtw_normalized_distance)[0],
+    };
+}
+
+function renderGroupMode(data) {
+    const pairwise = data.pairwise || [];
+    const insights = deriveGroupInsights(pairwise);
+    const corr = data.correlation_matrix || { symbols: [], matrix: [] };
+
+    document.getElementById('results').innerHTML = `
+        <div class="insight-grid">
+            <div class="insight-card"><h4>Activos Comparados</h4><div class="value">${(data.symbols || []).length}</div><div class="meta">Ventana reciente de ${data.window_points || '-'} puntos por activo.</div></div>
+            <div class="insight-card"><h4>Par Más Correlacionado</h4><div class="value">${insights.strongestPearson ? insights.strongestPearson.pair : '-'}</div><div class="meta">Pearson ${insights.strongestPearson && insights.strongestPearson.pearson_correlation != null ? insights.strongestPearson.pearson_correlation.toFixed(4) : '-'}</div></div>
+            <div class="insight-card"><h4>Menor Distancia</h4><div class="value">${insights.lowestEuclidean ? insights.lowestEuclidean.pair : '-'}</div><div class="meta">Euclidiana ${insights.lowestEuclidean && insights.lowestEuclidean.euclidean_distance != null ? insights.lowestEuclidean.euclidean_distance.toFixed(4) : '-'}</div></div>
+            <div class="insight-card"><h4>DTW Más Bajo</h4><div class="value">${insights.lowestDtw ? insights.lowestDtw.pair : '-'}</div><div class="meta">DTW ${insights.lowestDtw && insights.lowestDtw.dtw_normalized_distance != null ? insights.lowestDtw.dtw_normalized_distance.toFixed(4) : '-'}</div></div>
+        </div>
+        <div class="card">
+            <h2>Serie Normalizada Base 100</h2>
+            <p class="section-desc">Permite superponer activos con escalas muy distintas para comparar trayectorias relativas.</p>
+            <div class="chart-container"><canvas id="groupChart"></canvas></div>
+        </div>
+        <div class="card">
+            <h2>Matriz de Correlación del Grupo</h2>
+            <div class="table-scroll">${renderCorrelationTable(corr.symbols || [], corr.matrix || [])}</div>
+        </div>
+        <div class="card">
+            <h2>Resumen Pairwise</h2>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr><th>Par</th><th>Fechas Comunes</th><th>Pearson</th><th>Coseno</th><th>Euclidiana</th><th>DTW</th></tr>
+                    </thead>
+                    <tbody>
+                        ${pairwise.map(pair => `
+                            <tr>
+                                <td><strong>${pair.pair}</strong></td>
+                                <td>${pair.common_dates || 0}</td>
+                                <td>${pair.pearson_correlation != null ? pair.pearson_correlation.toFixed(4) : '-'}</td>
+                                <td>${pair.cosine_similarity != null ? pair.cosine_similarity.toFixed(4) : '-'}</td>
+                                <td>${pair.euclidean_distance != null ? pair.euclidean_distance.toFixed(4) : '-'}</td>
+                                <td>${pair.dtw_normalized_distance != null ? pair.dtw_normalized_distance.toFixed(4) : '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        ${renderFormulaGuide()}
+    `;
+
+    const normalized = data.normalized_series || { dates: [] };
+    const datasets = (data.symbols || []).map((symbol, index) => ({
+        label: symbol,
+        data: normalized[symbol] || [],
+        color: similarityPalette[index % similarityPalette.length],
+    }));
+    createLineChart(
+        'groupChart',
+        normalized.dates || [],
+        datasets,
+        `Evolución relativa de ${(data.symbols || []).join(', ')}`
+    );
+
+    renderMath(document.getElementById('results'));
+}
 
 async function loadSymbols() {
     try {
         const res = await fetch('/api/similarity/symbols');
         const data = await res.json();
-        const s1 = document.getElementById('symbol1');
-        const s2 = document.getElementById('symbol2');
-        data.symbols.forEach(sym => {
-            s1.innerHTML += `<option value="${sym}">${sym}</option>`;
-            s2.innerHTML += `<option value="${sym}">${sym}</option>`;
+        const grid = document.getElementById('symbolGrid');
+        grid.innerHTML = data.symbols.map((symbol, index) => `
+            <label class="selection-chip ${index < 2 ? 'is-selected' : ''}">
+                <input type="checkbox" value="${symbol}" ${index < 2 ? 'checked' : ''}>
+                <span>${symbol}</span>
+            </label>
+        `).join('');
+
+        grid.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.addEventListener('change', syncSelectionStyles);
         });
-        if (data.symbols.length >= 2) {
-            s2.selectedIndex = Math.min(1, data.symbols.length - 1);
-        }
-    } catch (e) {
-        showError('results', 'Error al cargar símbolos');
+
+        syncSelectionStyles();
+    } catch (error) {
+        showErrorBox('Error al cargar los símbolos disponibles.');
     }
 }
 
-async function calculateSimilarity() {
-    const s1 = document.getElementById('symbol1').value;
-    const s2 = document.getElementById('symbol2').value;
-    const loading = document.getElementById('loading');
+async function loadSimilarity() {
+    const selected = getSelectedSymbols();
+    const windowPoints = document.getElementById('windowPoints').value;
     const results = document.getElementById('results');
+    clearErrorBox();
+    results.innerHTML = '';
 
-    loading.style.display = 'block';
-    results.style.display = 'none';
+    if (selected.length < 2) {
+        showErrorBox('Seleccione al menos 2 activos para comparar.');
+        return;
+    }
 
     try {
-        const res = await fetch(`/api/similarity?s1=${s1}&s2=${s2}`);
-        const data = await res.json();
-
-        if (data.error) {
-            showError('results', data.error);
-            loading.style.display = 'none';
+        if (selected.length === 2) {
+            const [s1, s2] = selected;
+            const res = await fetch(`/api/similarity?s1=${s1}&s2=${s2}&window=${windowPoints}`);
+            const data = await res.json();
+            if (data.error) {
+                showErrorBox(data.error);
+                return;
+            }
+            renderPairMode(data);
             return;
         }
 
-        renderPriceChart(data);
-        renderResultsTable(data);
-        renderAlgorithmDetails(data);
-        results.style.display = 'block';
-    } catch (e) {
-        showError('results', 'Error al calcular similitud');
-    }
-    loading.style.display = 'none';
-}
+        const params = new URLSearchParams();
+        selected.forEach(symbol => params.append('symbols', symbol));
+        params.append('window', windowPoints);
 
-function renderPriceChart(data) {
-    if (priceChart) priceChart.destroy();
-    const series = data.series;
-    priceChart = createLineChart(
-        'priceChart',
-        series.dates,
-        [
-            { label: data.symbol1, data: series[data.symbol1], color: '#6c63ff' },
-            { label: data.symbol2, data: series[data.symbol2], color: '#ef4444' }
-        ],
-        `Precios: ${data.symbol1} vs ${data.symbol2} (${data.common_dates} días)`
-    );
-}
-
-function renderResultsTable(data) {
-    const tbody = document.getElementById('resultsTable');
-    const algorithms = [
-        { key: 'euclidean', name: 'Distancia Euclidiana', complexity: 'O(n)' },
-        { key: 'pearson', name: 'Correlación de Pearson', complexity: 'O(n)' },
-        { key: 'dtw', name: 'Dynamic Time Warping (DTW)', complexity: data.dtw.complexity },
-        { key: 'cosine', name: 'Similitud por Coseno', complexity: 'O(n)' }
-    ];
-
-    tbody.innerHTML = '';
-    algorithms.forEach(alg => {
-        const val = data[alg.key];
-        const value = val.distance !== undefined ? val.distance :
-                      val.correlation !== undefined ? val.correlation :
-                      val.similarity !== undefined ? val.similarity : 'N/A';
-        const interpretation = val.interpretation || val.description || '';
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td><strong>${alg.name}</strong></td>
-            <td>${typeof value === 'number' ? value.toFixed(6) : value}</td>
-            <td class="text-muted">${interpretation.substring(0, 120)}</td>
-            <td><code>${alg.complexity}</code></td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-function renderAlgorithmDetails(data) {
-    const container = document.getElementById('algorithmDetails');
-    const details = [
-        {
-            title: 'Distancia Euclidiana',
-            formula: data.euclidean.formula,
-            desc: data.euclidean.description,
-            detail: `Distancia: ${data.euclidean.distance} | Observaciones: ${data.euclidean.n}`
-        },
-        {
-            title: 'Correlación de Pearson',
-            formula: data.pearson.formula,
-            desc: data.pearson.description,
-            detail: `r = ${data.pearson.correlation} | Covarianza: ${data.pearson.covariance} | n = ${data.pearson.n}`
-        },
-        {
-            title: 'Dynamic Time Warping (DTW)',
-            formula: data.dtw.formula,
-            desc: data.dtw.description,
-            detail: `DTW = ${data.dtw.distance} | Normalizado = ${data.dtw.normalized_distance} | Camino: ${data.dtw.path_length} pasos`
-        },
-        {
-            title: 'Similitud por Coseno',
-            formula: data.cosine.formula,
-            desc: data.cosine.description,
-            detail: `cos(θ) = ${data.cosine.similarity} | Ángulo: ${data.cosine.angle_degrees}° | n = ${data.cosine.n}`
+        const res = await fetch(`/api/similarity/group?${params.toString()}`);
+        const data = await res.json();
+        if (data.error) {
+            showErrorBox(data.error);
+            return;
         }
-    ];
-
-    container.innerHTML = details.map(d => `
-        <div style="margin-bottom:16px; padding:16px; background:#f9fafb; border-radius:8px;">
-            <h3 style="margin-bottom:8px;">${d.title}</h3>
-            <p style="font-family:monospace; background:#e5e7eb; padding:8px; border-radius:4px; margin-bottom:8px; font-size:13px;">
-                ${d.formula}
-            </p>
-            <p class="text-muted mb-2">${d.desc}</p>
-            <p class="text-muted" style="font-size:12px;">${d.detail}</p>
-        </div>
-    `).join('');
+        renderGroupMode(data);
+    } catch (error) {
+        showErrorBox('Error al calcular la similitud solicitada.');
+    }
 }
 
 loadSymbols();

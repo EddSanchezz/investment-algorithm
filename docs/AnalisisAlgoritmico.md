@@ -123,12 +123,15 @@ D[i][j] = |xᵢ - yⱼ| + min(D[i-1][j], D[i][j-1], D[i-1][j-1])
 | `_extract_series` | O(n₁ + n₂) | O(min(n₁, n₂)) |
 | `_returns` | O(n) | O(n) |
 | `compare` 1-par | O(4n) = O(n) | O(n) |
+| `compare_many` | O(p × n + s²) | O(s² + s × n) |
 | `compute_correlation_matrix` | **O(s² × n)** | O(s²) |
 
 **Matriz de correlación**: Para s = 20, n = 1250:
 - Llamadas a Pearson: s(s-1)/2 = 190
 - Operaciones totales: ~190 × 1250 × 3 = ~712,500 operaciones de punto flotante
 - Matriz resultante: 20 × 20 = 400 flotantes (~3.2 KB)
+
+**Comparación multi-activo**: `compare_many` arma una serie normalizada base 100 para todos los símbolos seleccionados y calcula métricas pairwise para cada combinación. Si el usuario trabaja con más de dos activos, la UI usa esta ruta para evitar limitar el análisis a una sola pareja.
 
 ### 1.3 Módulo de Patrones
 
@@ -155,6 +158,13 @@ para cada i en 1..n-1:
 - **Tiempo**: O(n) — una pasada
 - **Espacio**: O(k) — k = gaps detectados
 - **Operaciones por iteración**: 1 resta, 1 división, 1 multiplicación, 1 comparación
+
+**Patrones adicionales**:
+- `Consecutive Down`: misma estructura que `Consecutive Up`, cambiando la comparación a `close[i] < close[i-1]`
+- `Gap Down`: espejo de `Gap Up`, usando `open[i] < close[i-1] × (1 - threshold)`
+- `Breakout Up/Down`: ventana de tamaño `w` que compara el cierre actual contra el máximo o mínimo de las `w` sesiones previas
+
+Todos los patrones se mantienen en complejidad O(n), ya sea mediante contadores acumulados o comparaciones contra resúmenes de la ventana reciente.
 
 #### `src/services/patterns/volatility.py`
 
