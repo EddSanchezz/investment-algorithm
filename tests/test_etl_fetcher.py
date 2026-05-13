@@ -53,13 +53,14 @@ class TestMultiSourceFetcher:
         self.fetcher = MultiSourceFetcher(logger=lambda msg: None)
 
     def test_providers_initialized(self):
-        assert len(self.fetcher.providers) == 5
+        assert len(self.fetcher.providers) == 6
 
     def test_provider_names(self):
         names = [p.name for p in self.fetcher.providers]
         assert "Tiingo API" in names
         assert "Yahoo Finance API" in names
         assert "Alpha Vantage" in names
+        assert "Stooq CSV" in names
         assert "Web Scraper (5 sitios)" in names
         assert "Binance" in names
 

@@ -17,6 +17,7 @@ from .base import DataProvider
 from .tiingo import TiingoProvider
 from .yahoo_api import YahooFinanceProvider
 from .alpha_vantage import AlphaVantageProvider
+from .stooq import StooqProvider
 from .web_scraper import WebScraperProvider
 from .binance import BinanceProvider
 from .multi_source import MultiSourceFetcher
@@ -26,6 +27,7 @@ __all__ = [
     "TiingoProvider",
     "YahooFinanceProvider",
     "AlphaVantageProvider",
+    "StooqProvider",
     "WebScraperProvider",
     "BinanceProvider",
     "MultiSourceFetcher",

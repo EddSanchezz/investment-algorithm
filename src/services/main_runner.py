@@ -80,8 +80,7 @@ class InvestmentPipeline:
         all_records = self.fetcher.fetch_multiple_assets(symbols, years)
 
         if not all_records:
-            print("ERROR: No se pudieron obtener datos.")
-            return []
+            raise RuntimeError("No se pudieron obtener datos de ningun proveedor.")
 
         self.fetcher.save_to_csv(all_records, raw_file)
 
@@ -273,20 +272,27 @@ def main():
     pipeline = InvestmentPipeline()
 
     unified_file = os.path.join(pipeline.processed_dir, "unified_data.csv")
-    if args.force_download or not os.path.exists(unified_file):
-        if args.symbols:
-            records = pipeline.run_etl(symbols=args.symbols, years=args.years)
+    try:
+        if args.force_download or not os.path.exists(unified_file):
+            if args.symbols:
+                records = pipeline.run_etl(symbols=args.symbols, years=args.years)
+            else:
+                records = pipeline.run_etl()
         else:
-            records = pipeline.run_etl()
-    else:
-        print(f"\nUsando datos existentes en {unified_file}")
-        print("(usa --force-download para regenerar desde cero)")
-        records = pipeline.unifier.load_from_csv(unified_file)
+            print(f"\nUsando datos existentes en {unified_file}")
+            print("(usa --force-download para regenerar desde cero)")
+            records = pipeline.unifier.load_from_csv(unified_file)
 
-    pipeline.run_sorting_analysis(records)
-    pipeline.run_volume_analysis(records)
+        if not records:
+            raise RuntimeError("El pipeline no produjo registros para analizar.")
 
-    print("\n¡Análisis completado!")
+        pipeline.run_sorting_analysis(records)
+        pipeline.run_volume_analysis(records)
+
+        print("\n¡Análisis completado!")
+    except RuntimeError as exc:
+        print(f"\nERROR: {exc}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

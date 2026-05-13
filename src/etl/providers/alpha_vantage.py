@@ -53,6 +53,13 @@ class AlphaVantageProvider(DataProvider):
     def name(self) -> str:
         return "Alpha Vantage"
 
+    def is_available(self) -> bool:
+        """Disponible solo si existe API key configurada."""
+        if not API_KEY:
+            self._logger(f"  [X] {self.name}: falta ALPHA_VANTAGE_API_KEY")
+            return False
+        return True
+
     def _wait_for_rate_limit(self) -> None:
         """Espera el tiempo necesario para respetar el rate limit."""
         elapsed = time.time() - self._last_call_time

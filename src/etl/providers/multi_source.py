@@ -20,6 +20,7 @@ from .base import DataProvider
 from .tiingo import TiingoProvider
 from .yahoo_api import YahooFinanceProvider
 from .alpha_vantage import AlphaVantageProvider
+from .stooq import StooqProvider
 from .web_scraper import WebScraperProvider
 from .binance import BinanceProvider
 
@@ -48,6 +49,7 @@ class MultiSourceFetcher:
             TiingoProvider(self._logger),
             YahooFinanceProvider(self._logger),
             AlphaVantageProvider(self._logger),
+            StooqProvider(self._logger),
             WebScraperProvider(self._logger),
             BinanceProvider(self._logger),
         ]

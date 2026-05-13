@@ -5,7 +5,6 @@ Este provider es más conservador con las peticiones para evitar
 el bloqueo por 429 Too Many Requests.
 """
 
-import random
 import time
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -36,11 +35,10 @@ CIRCUIT_BREAKER_RESET: float = 120.0
 REQUEST_TIMEOUT: int = 30
 """Timeout por petición HTTP."""
 
-USER_AGENTS: List[str] = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-]
+USER_AGENT: str = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def _exponential_backoff(attempt: int) -> float:
@@ -64,12 +62,19 @@ class YahooFinanceProvider(DataProvider):
     - Solo 3 reintentos (antes 5)
     """
 
-    BASE_URL: str = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    BASE_URLS: List[str] = [
+        "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+        "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
+    ]
 
     def __init__(self, logger: Optional[callable] = None):
         self._logger = logger or print
         self._session = requests.Session()
-        self._session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
+        self._session.headers.update({
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json,text/plain,*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
 
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=10,
@@ -103,7 +108,6 @@ class YahooFinanceProvider(DataProvider):
             self._logger(f"  [WARN] {self.name}: Saltando {symbol} (Circuit Breaker activo)")
             return []
 
-        url = self.BASE_URL.format(symbol=symbol.upper())
         params = {
             "period1": int(start_date.timestamp()),
             "period2": int(end_date.timestamp()),
@@ -112,40 +116,38 @@ class YahooFinanceProvider(DataProvider):
         }
 
         for attempt in range(MAX_RETRIES):
-            try:
-                response = self._session.get(url, params=params, timeout=REQUEST_TIMEOUT)
-                response.raise_for_status()
-                records = self._parse_response(response.json(), symbol)
-                self._consecutive_failures = 0
-                if records:
-                    self._logger(f"  [OK] {self.name}: {symbol} ({len(records)} registros)")
-                return records
+            for base_url in self.BASE_URLS:
+                url = base_url.format(symbol=symbol.upper())
+                try:
+                    response = self._session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+                    response.raise_for_status()
+                    records = self._parse_response(response.json(), symbol)
+                    self._consecutive_failures = 0
+                    if records:
+                        self._logger(f"  [OK] {self.name}: {symbol} ({len(records)} registros)")
+                    return records
 
-            except requests.exceptions.HTTPError as e:
-                if response.status_code == 429:
-                    self._consecutive_failures += 1
-                    self._check_circuit_breaker()
-                    self._logger(f"  [WARN] {self.name}: Rate limit para {symbol}")
+                except requests.exceptions.HTTPError:
+                    if response.status_code == 429:
+                        self._logger(f"  [WARN] {self.name}: Rate limit para {symbol} en {base_url.split('/')[2]}")
+                        continue
+                    self._logger(f"  [WARN] {self.name}: HTTP {response.status_code} para {symbol}")
 
-                if attempt < MAX_RETRIES - 1:
-                    delay = _exponential_backoff(attempt)
-                    self._logger(f"  [WARN] Reintento {attempt + 1}/{MAX_RETRIES} para {symbol} en {delay:.1f}s")
-                    time.sleep(delay)
-                else:
-                    self._logger(f"  [ERR] {self.name}: Fallo definitivo para {symbol}")
+                except requests.exceptions.RequestException as e:
+                    self._logger(f"  [WARN] {self.name}: error de red para {symbol}: {e}")
 
-            except requests.exceptions.RequestException as e:
-                self._consecutive_failures += 1
-                self._check_circuit_breaker()
+                except (ValueError, KeyError, TypeError, IndexError) as e:
+                    self._logger(f"  [ERR] Error de parseo para {symbol}: {e}")
+                    return []
 
-                if attempt < MAX_RETRIES - 1:
-                    delay = _exponential_backoff(attempt)
-                    self._logger(f"  [WARN] Reintento {attempt + 1}/{MAX_RETRIES} para {symbol}: {e}")
-                    time.sleep(delay)
-
-            except (ValueError, KeyError, TypeError, IndexError) as e:
-                self._logger(f"  [ERR] Error de parseo para {symbol}: {e}")
-                return []
+            self._consecutive_failures += 1
+            self._check_circuit_breaker()
+            if attempt < MAX_RETRIES - 1:
+                delay = _exponential_backoff(attempt)
+                self._logger(f"  [WARN] Reintento {attempt + 1}/{MAX_RETRIES} para {symbol} en {delay:.1f}s")
+                time.sleep(delay)
+            else:
+                self._logger(f"  [ERR] {self.name}: Fallo definitivo para {symbol}")
 
         return []
 

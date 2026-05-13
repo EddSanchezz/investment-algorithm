@@ -51,6 +51,13 @@ class TiingoProvider(DataProvider):
     def name(self) -> str:
         return "Tiingo API"
 
+    def is_available(self) -> bool:
+        """Disponible solo si existe token configurado."""
+        if not API_TOKEN:
+            self._logger(f"  [X] {self.name}: falta TIINGO_API_TOKEN")
+            return False
+        return True
+
     def _wait_for_rate_limit(self) -> None:
         """Espera lo necesario para no exceder rate limit."""
         elapsed = time.time() - self._last_call_time
