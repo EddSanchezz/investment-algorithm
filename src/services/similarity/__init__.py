@@ -208,7 +208,8 @@ class SimilarityAnalyzer:
 
         results["euclidean"] = euclidean_distance(prices1, prices2)
         results["pearson"] = pearson_correlation(returns1, returns2)
-        results["dtw"] = dtw_distance(prices1, prices2)
+        dtw_window = min(252, max(len(prices1), len(prices2)) // 10) if max_points else None
+        results["dtw"] = dtw_distance(prices1, prices2, window=dtw_window, full_matrix=False)
         results["cosine"] = cosine_similarity(returns1, returns2)
 
         return results
@@ -282,7 +283,7 @@ class SimilarityAnalyzer:
         }
 
     def compute_correlation_matrix(
-        self, records: List[Dict], symbols: List[str]
+        self, records: List[Dict], symbols: List[str], max_points: Optional[int] = 252
     ) -> Dict:
         """
         Calcula la matriz de correlación de Pearson para un conjunto de símbolos.
@@ -290,6 +291,8 @@ class SimilarityAnalyzer:
         Parámetros:
             records: Lista de registros financieros unificados
             symbols: Lista de símbolos a incluir
+            max_points: Limita cada serie a los últimos N puntos (default: 252 = 1 año).
+                        None usa la serie completa.
 
         Retorna:
             Dict con matriz de correlación y lista de símbolos
@@ -304,7 +307,7 @@ class SimilarityAnalyzer:
                 if i == j:
                     matrix[i][j] = 1.0
                 else:
-                    cmp = self.compare(records, symbols[i], symbols[j])
+                    cmp = self.compare(records, symbols[i], symbols[j], max_points=max_points)
                     r = cmp.get("pearson", {})
                     val = r.get("correlation") if isinstance(r, dict) else None
                     if val is not None:
