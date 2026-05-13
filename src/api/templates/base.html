@@ -38,33 +38,112 @@
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
+    <div class="refresh-modal" id="refreshModal" aria-hidden="true">
+        <div class="refresh-dialog" role="status" aria-live="polite">
+            <h2 id="refreshTitle">Actualizando datos</h2>
+            <p id="refreshMessage">Obteniendo datos financieros...</p>
+            <div class="refresh-progress" id="refreshProgress">
+                <div class="refresh-progress-bar"></div>
+            </div>
+            <p class="refresh-meta" id="refreshMeta"></p>
+            <button type="button" class="btn refresh-close-btn" id="refreshCloseBtn">Cerrar</button>
+        </div>
+    </div>
     <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const refreshButtons = document.querySelectorAll('.refresh-data-btn');
+            const refreshModal = document.getElementById('refreshModal');
+            const refreshTitle = document.getElementById('refreshTitle');
+            const refreshMessage = document.getElementById('refreshMessage');
+            const refreshMeta = document.getElementById('refreshMeta');
+            const refreshProgress = document.getElementById('refreshProgress');
+            const refreshCloseBtn = document.getElementById('refreshCloseBtn');
+            let refreshPollTimer = null;
+
+            function setRefreshButtonsDisabled(disabled) {
+                refreshButtons.forEach((btn) => {
+                    btn.textContent = disabled ? 'Actualizando...' : btn.dataset.defaultText;
+                    btn.disabled = disabled;
+                });
+            }
+
+            function showRefreshModal(state, message, command) {
+                refreshModal.classList.add('is-visible');
+                refreshModal.setAttribute('aria-hidden', 'false');
+                refreshProgress.classList.toggle('is-complete', state === 'success');
+                refreshProgress.classList.toggle('is-error', state === 'error');
+                refreshCloseBtn.style.display = state === 'running' ? 'none' : 'inline-flex';
+
+                if (state === 'success') {
+                    refreshTitle.textContent = 'Datos cargados correctamente';
+                    refreshMessage.textContent = message || 'La actualización finalizó correctamente.';
+                } else if (state === 'error') {
+                    refreshTitle.textContent = 'No se pudieron cargar los datos';
+                    refreshMessage.textContent = message || 'Revisa los logs del servidor e intenta de nuevo.';
+                } else {
+                    refreshTitle.textContent = 'Actualizando datos';
+                    refreshMessage.textContent = message || 'Cargando datos financieros, esto puede tardar unos minutos.';
+                }
+                refreshMeta.textContent = command ? `Comando: ${command}` : '';
+            }
+
+            function stopRefreshPolling() {
+                if (refreshPollTimer) {
+                    clearTimeout(refreshPollTimer);
+                    refreshPollTimer = null;
+                }
+            }
+
+            async function pollRefreshStatus(statusUrl) {
+                try {
+                    const res = await fetch(statusUrl);
+                    const data = await res.json();
+                    showRefreshModal(data.status, data.message, data.command);
+
+                    if (data.status === 'running') {
+                        refreshPollTimer = setTimeout(() => pollRefreshStatus(statusUrl), 2000);
+                        return;
+                    }
+
+                    setRefreshButtonsDisabled(false);
+                    stopRefreshPolling();
+                } catch (e) {
+                    showRefreshModal('error', 'No se pudo consultar el estado de la actualización.');
+                    setRefreshButtonsDisabled(false);
+                    stopRefreshPolling();
+                    console.error('Error polling refresh status:', e);
+                }
+            }
+
+            refreshCloseBtn.addEventListener('click', () => {
+                refreshModal.classList.remove('is-visible');
+                refreshModal.setAttribute('aria-hidden', 'true');
+                if (refreshTitle.textContent === 'Datos cargados correctamente') {
+                    window.location.reload();
+                }
+            });
+
             refreshButtons.forEach((button) => {
                 button.dataset.defaultText = button.textContent;
                 button.addEventListener('click', async () => {
-                    refreshButtons.forEach((btn) => {
-                        btn.textContent = 'Actualizando...';
-                        btn.disabled = true;
-                    });
+                    stopRefreshPolling();
+                    setRefreshButtonsDisabled(true);
+                    showRefreshModal('running', 'Cargando datos financieros, esto puede tardar unos minutos.');
                     try {
                         const res = await fetch('/api/refresh-data', { method: 'POST' });
                         const data = await res.json();
-                        if (res.ok) {
-                            alert(`Actualizacion iniciada con ${data.command}. Espera unos minutos y recarga la pagina.`);
-                        } else {
-                            alert(`Error al iniciar la actualizacion: ${data.message || res.statusText}`);
+                        if (res.ok || res.status === 409) {
+                            showRefreshModal('running', data.message, data.command);
+                            pollRefreshStatus(data.status_url || '/api/refresh-data/status');
+                            return;
                         }
+                        showRefreshModal('error', data.message || res.statusText);
+                        setRefreshButtonsDisabled(false);
                     } catch (e) {
-                        alert('Error de red al iniciar la actualizacion de datos.');
+                        showRefreshModal('error', 'Error de red al iniciar la actualización de datos.');
                         console.error('Error refreshing data:', e);
-                    } finally {
-                        refreshButtons.forEach((btn) => {
-                            btn.textContent = btn.dataset.defaultText;
-                            btn.disabled = false;
-                        });
+                        setRefreshButtonsDisabled(false);
                     }
                 });
             });

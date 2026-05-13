@@ -70,14 +70,30 @@ class TestRefreshDataEndpoint:
         monkeypatch.setattr(gateway.shutil, "which", lambda _name: None)
         monkeypatch.setattr(gateway.subprocess, "Popen", fake_popen)
         monkeypatch.setattr(gateway.threading, "Thread", FakeThread)
+        monkeypatch.setattr(
+            gateway,
+            "REFRESH_STATUS_FILE",
+            os.path.join(os.path.dirname(__file__), "refresh_status_test.json"),
+        )
+        if os.path.exists(gateway.REFRESH_STATUS_FILE):
+            os.remove(gateway.REFRESH_STATUS_FILE)
 
         resp = client.post("/api/refresh-data")
 
         assert resp.status_code == 202
         data = resp.get_json()
         assert data["status"] == "success"
+        assert data["refresh_status"] == "running"
         assert data["command"] == "python -m src.services.main_runner --force-download"
+        assert data["status_url"] == "/api/refresh-data/status"
         assert started["command"][-3:] == ["-m", "src.services.main_runner", "--force-download"]
+
+        status_resp = client.get("/api/refresh-data/status")
+        status_data = status_resp.get_json()
+        assert status_data["status"] == "success"
+        assert status_data["message"] == "Datos cargados correctamente."
+
+        os.remove(gateway.REFRESH_STATUS_FILE)
 
 
 class TestRecordsEndpoint:

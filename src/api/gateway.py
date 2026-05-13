@@ -20,11 +20,13 @@ Complejidad: O(1) para enrutamiento; la carga de datos (O(n)) está en data.py.
 """
 
 from flask import Flask, jsonify, request, render_template
+import json
 import os
 import shutil
 import subprocess
 import sys
 import threading
+from datetime import datetime, timezone
 
 from src.api.data import get_records, invalidate_cache, comparator, volume_analyzer, unifier
 from src.api.routes.similarity import similarity_bp
@@ -39,6 +41,40 @@ app.register_blueprint(similarity_bp)
 app.register_blueprint(patterns_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(reports_bp)
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+REFRESH_STATUS_FILE = os.path.join(PROJECT_ROOT, "data", "processed", "refresh_status.json")
+
+
+def _utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _write_refresh_status(status, message, command=None, exit_code=None):
+    os.makedirs(os.path.dirname(REFRESH_STATUS_FILE), exist_ok=True)
+    payload = {
+        "status": status,
+        "message": message,
+        "command": command,
+        "exit_code": exit_code,
+        "updated_at": _utc_now_iso(),
+    }
+    with open(REFRESH_STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+    return payload
+
+
+def _read_refresh_status():
+    if not os.path.exists(REFRESH_STATUS_FILE):
+        return {
+            "status": "idle",
+            "message": "No hay una actualización de datos en curso.",
+            "command": None,
+            "exit_code": None,
+            "updated_at": None,
+        }
+    with open(REFRESH_STATUS_FILE, encoding="utf-8") as f:
+        return json.load(f)
 
 
 @app.route("/api/health", methods=["GET"])
@@ -115,7 +151,10 @@ def refresh_data():
     Retorna inmediatamente sin esperar a que el ETL termine.
     """
     try:
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        current_status = _read_refresh_status()
+        if current_status["status"] == "running":
+            return jsonify(current_status), 409
+
         task_executable = shutil.which("task")
         command = [task_executable, "run-full"] if task_executable else [
             sys.executable,
@@ -123,27 +162,57 @@ def refresh_data():
             "src.services.main_runner",
             "--force-download",
         ]
+        command_label = "task run-full" if task_executable else "python -m src.services.main_runner --force-download"
 
-        process = subprocess.Popen(command, cwd=project_root)
+        _write_refresh_status(
+            "running",
+            "Obteniendo y procesando datos financieros...",
+            command_label,
+        )
+        process = subprocess.Popen(command, cwd=PROJECT_ROOT)
 
         def invalidate_when_done():
             exit_code = process.wait()
             if exit_code == 0:
                 invalidate_cache()
+                _write_refresh_status(
+                    "success",
+                    "Datos cargados correctamente.",
+                    command_label,
+                    exit_code,
+                )
                 print("[*] ETL: Datos actualizados y cache invalidada.")
             else:
+                _write_refresh_status(
+                    "error",
+                    "No se pudieron actualizar los datos. Revisa los logs del servidor.",
+                    command_label,
+                    exit_code,
+                )
                 print(f"[!] ETL: Proceso finalizó con código {exit_code}.")
 
         threading.Thread(target=invalidate_when_done, daemon=True).start()
         print(f"[*] ETL: Proceso iniciado en segundo plano: {' '.join(command)}")
         return jsonify({
             "status": "success",
-            "message": "Data refresh started. Wait a few minutes and refresh the page to see updated data.",
-            "command": "task run-full" if task_executable else "python -m src.services.main_runner --force-download",
+            "refresh_status": "running",
+            "message": "Actualización de datos iniciada.",
+            "command": command_label,
+            "status_url": "/api/refresh-data/status",
         }), 202
     except Exception as e:
+        _write_refresh_status(
+            "error",
+            f"No se pudo iniciar la actualización de datos: {e}",
+        )
         print(f"[!] ETL: Error al iniciar proceso de actualización de datos: {e}")
         return jsonify({"status": "error", "message": f"Failed to initiate data refresh: {e}"}), 500
+
+
+@app.route("/api/refresh-data/status", methods=["GET"])
+def refresh_data_status():
+    """Retorna el estado del proceso ETL iniciado desde la UI."""
+    return jsonify(_read_refresh_status())
 
 
 # ─── HTML Pages ──────────────────────────────────────────────
