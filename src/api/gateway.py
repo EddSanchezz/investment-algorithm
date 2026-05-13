@@ -21,9 +21,12 @@ Complejidad: O(1) para enrutamiento; la carga de datos (O(n)) está en data.py.
 
 from flask import Flask, jsonify, request, render_template
 import os
+import shutil
 import subprocess
+import sys
+import threading
 
-from src.api.data import get_records, comparator, volume_analyzer, unifier
+from src.api.data import get_records, invalidate_cache, comparator, volume_analyzer, unifier
 from src.api.routes.similarity import similarity_bp
 from src.api.routes.patterns import patterns_bp
 from src.api.routes.dashboard import dashboard_bp
@@ -112,18 +115,32 @@ def refresh_data():
     Retorna inmediatamente sin esperar a que el ETL termine.
     """
     try:
-        # Iniciar el proceso main_runner.py en segundo plano
-        # La ruta del ejecutable de Python debe ser absoluta
-        # o estar en el PATH del sistema para un despliegue sin venv directo.
-        python_executable = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                                           '..', '..', '.venv', 'Scripts', 'python.exe')
-        if not os.path.exists(python_executable):
-            # Fallback para entornos como Render donde Python ya está en el PATH
-            python_executable = 'python' 
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        task_executable = shutil.which("task")
+        command = [task_executable, "run-full"] if task_executable else [
+            sys.executable,
+            "-m",
+            "src.services.main_runner",
+            "--force-download",
+        ]
 
-        subprocess.Popen([python_executable, '-m', 'src.services.main_runner', '--force-download'])
-        print("[*] ETL: Proceso de actualización de datos iniciado en segundo plano.")
-        return jsonify({"status": "success", "message": "Data refresh initiated. Please check logs for progress and refresh the page later to see updated data."}), 202
+        process = subprocess.Popen(command, cwd=project_root)
+
+        def invalidate_when_done():
+            exit_code = process.wait()
+            if exit_code == 0:
+                invalidate_cache()
+                print("[*] ETL: Datos actualizados y cache invalidada.")
+            else:
+                print(f"[!] ETL: Proceso finalizó con código {exit_code}.")
+
+        threading.Thread(target=invalidate_when_done, daemon=True).start()
+        print(f"[*] ETL: Proceso iniciado en segundo plano: {' '.join(command)}")
+        return jsonify({
+            "status": "success",
+            "message": "Data refresh started. Wait a few minutes and refresh the page to see updated data.",
+            "command": "task run-full" if task_executable else "python -m src.services.main_runner --force-download",
+        }), 202
     except Exception as e:
         print(f"[!] ETL: Error al iniciar proceso de actualización de datos: {e}")
         return jsonify({"status": "error", "message": f"Failed to initiate data refresh: {e}"}), 500

@@ -44,6 +44,42 @@ class TestHealthEndpoint:
         assert "message" in data
 
 
+class TestRefreshDataEndpoint:
+    def test_refresh_data_starts_background_process(self, client, monkeypatch):
+        import src.api.gateway as gateway
+
+        started = {}
+
+        class FakeProcess:
+            def wait(self):
+                return 0
+
+        class FakeThread:
+            def __init__(self, target, daemon):
+                self.target = target
+                self.daemon = daemon
+
+            def start(self):
+                self.target()
+
+        def fake_popen(command, cwd):
+            started["command"] = command
+            started["cwd"] = cwd
+            return FakeProcess()
+
+        monkeypatch.setattr(gateway.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(gateway.subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(gateway.threading, "Thread", FakeThread)
+
+        resp = client.post("/api/refresh-data")
+
+        assert resp.status_code == 202
+        data = resp.get_json()
+        assert data["status"] == "success"
+        assert data["command"] == "python -m src.services.main_runner --force-download"
+        assert started["command"][-3:] == ["-m", "src.services.main_runner", "--force-download"]
+
+
 class TestRecordsEndpoint:
     def test_records_returns_json(self, client):
         resp = client.get("/api/records")

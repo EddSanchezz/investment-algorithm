@@ -62,6 +62,31 @@ body {
     border-left: 3px solid #6c63ff;
 }
 
+.sidebar-action {
+    width: calc(100% - 32px);
+    margin: 8px 16px 0;
+    padding: 10px 12px;
+    border: 1px solid #4f46e5;
+    border-radius: 6px;
+    background: #6c63ff;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+}
+
+.sidebar-action:hover {
+    background: #5a52e0;
+}
+
+.sidebar-action:disabled,
+.btn:disabled,
+.btn-secondary:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
 .main-content {
     margin-left: 240px;
     flex: 1;
